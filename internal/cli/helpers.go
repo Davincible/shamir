@@ -96,6 +96,7 @@ func readPasswordWithStars(prompt string) (string, error) {
 			}
 
 		case 3: // Ctrl+C
+			term.Restore(int(syscall.Stdin), oldState)
 			fmt.Println("\n\nOperation cancelled by user.")
 			os.Exit(0)
 
@@ -177,6 +178,7 @@ func readPassphraseWithStars(prompt string) (string, error) {
 			}
 
 		case 3: // Ctrl+C
+			term.Restore(int(syscall.Stdin), oldState)
 			fmt.Println("\n\nOperation cancelled by user.")
 			os.Exit(0)
 
@@ -230,10 +232,8 @@ func readMnemonicWithSmartStars(prompt string) (string, error) {
 	
 	// Function to redraw the display
 	redrawDisplay := func() {
-		// Clear current line
-		fmt.Print("\r")
-		fmt.Print(strings.Repeat(" ", 80)) // Clear up to 80 chars
-		fmt.Print("\r")
+		// Clear current line using ANSI escape sequences
+		fmt.Print("\r\033[K") // Move to start of line and clear to end
 		fmt.Print(prompt)
 		
 		// Show completed words as stars
@@ -247,12 +247,7 @@ func readMnemonicWithSmartStars(prompt string) (string, error) {
 	
 	// Function to build final password
 	buildPassword := func() string {
-		var result []string
-		result = append(result, completedWords...)
-		if len(currentWord) > 0 {
-			result = append(result, string(currentWord))
-		}
-		return strings.Join(result, " ")
+		return strings.Join(completedWords, " ")
 	}
 	
 	for {
@@ -268,6 +263,13 @@ func readMnemonicWithSmartStars(prompt string) (string, error) {
 			// Add current word if it exists
 			if len(currentWord) > 0 {
 				completedWords = append(completedWords, string(currentWord))
+				currentWord = nil
+				// Redraw to show final word as star
+				fmt.Print("\r\033[K") // Clear line
+				fmt.Print(prompt)
+				for range completedWords {
+					fmt.Print("* ")
+				}
 			}
 			fmt.Println()
 			return buildPassword(), nil
@@ -285,6 +287,7 @@ func readMnemonicWithSmartStars(prompt string) (string, error) {
 			redrawDisplay()
 			
 		case 3: // Ctrl+C
+			term.Restore(int(syscall.Stdin), oldState)
 			fmt.Println("\n\nOperation cancelled by user.")
 			os.Exit(0)
 			

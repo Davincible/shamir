@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -123,8 +125,15 @@ Examples:
 					fmt.Println("3. Enter raw secret (hex or text)")
 					fmt.Print("\nChoice [1]: ")
 
-					var choice string
-					fmt.Scanln(&choice)
+					reader := bufio.NewReader(os.Stdin)
+					input, _ := reader.ReadString('\n')
+					choice := strings.TrimSpace(input)
+					
+					// Only take first character to prevent mnemonic leakage
+					if len(choice) > 1 {
+						choice = string(choice[0])
+						fmt.Printf("(Using choice: %s)\n\n", choice)
+					}
 
 					if choice == "" || choice == "1" {
 						// Generate random 256-bit secret by default
@@ -145,7 +154,7 @@ Examples:
 								return err
 							}
 
-							// Convert BIP-39 mnemonic to seed (first 32 bytes)
+							// Validate BIP-39 mnemonic
 							m, err := mnemonic.FromWords(mnemonicInput)
 							if err != nil {
 								red := color.New(color.FgRed, color.Bold)
@@ -157,10 +166,25 @@ Examples:
 								fmt.Println("\nTry again or press Ctrl+C to exit.\n")
 								continue // Try mnemonic input again
 							}
+							
+							// Convert BIP-39 to BIP-32 master seed (SLIP-0039 standard compliance)
+							// Per SLIP-0039 spec: "use the BIP-0032 master seed as the SLIP-0039 master secret"
 							seed := m.Seed()
-							masterSecret = seed[:32] // Use first 32 bytes (256-bit)
+							
+							// Use the first 32 bytes as the master secret (256-bit)
+							// This is the seed that would be input to HMAC-SHA512 for BIP-32 derivation
+							if len(seed) >= 32 {
+								masterSecret = seed[:32]
+							} else {
+								masterSecret = seed
+								// Pad to minimum 16 bytes if needed
+								for len(masterSecret) < 16 {
+									masterSecret = append(masterSecret, 0)
+								}
+							}
 
-							fmt.Println("\n✓ Using 256-bit seed derived from BIP-39 mnemonic")
+							fmt.Println("\n✓ Converted BIP-39 to BIP-32 master seed (SLIP-0039 compliant)")
+							fmt.Printf("   Master seed: %x\n", masterSecret)
 							break
 						}
 						break

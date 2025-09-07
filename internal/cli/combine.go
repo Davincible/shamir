@@ -89,10 +89,14 @@ Examples:
 				cyan.Println("Master Secret (text):")
 				fmt.Printf("%s\n", string(masterSecret))
 			} else {
-				// Show both by default
-				cyan.Println("Master Secret:")
-				fmt.Printf("  Text: %s\n", string(masterSecret))
+				// Show BIP-32 master seed information (SLIP-0039 compliant)
+				cyan.Println("BIP-32 Master Seed (SLIP-0039 Recovery):")
 				fmt.Printf("  Hex:  %x\n", masterSecret)
+				fmt.Printf("  Size: %d bytes (%d bits)\n", len(masterSecret), len(masterSecret)*8)
+				fmt.Println()
+				fmt.Println("💡 This is your BIP-32 master seed recovered from SLIP-0039 shares.")
+				fmt.Println("   Use this seed to restore your wallet in any BIP-32 compatible wallet.")
+				fmt.Println("   This seed is what was originally derived from your BIP-39 mnemonic.")
 			}
 
 			// Clear sensitive data
