@@ -13,7 +13,7 @@ import (
 type VectorTestCase []interface{}
 
 func TestOfficialVectors(t *testing.T) {
-	t.Skip("Skipping official test vectors - implementation uses different constants")
+	// Test against official SLIP-0039 test vectors to ensure spec compliance
 	// Load test vectors
 	vectorsPath := filepath.Join("..", "..", "..", "docs", "slip-0039-vectors.json")
 	data, err := os.ReadFile(vectorsPath)

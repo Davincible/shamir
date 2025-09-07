@@ -17,17 +17,24 @@ var (
 
 func init() {
 	// Initialize exp and log tables for GF(256)
-	// Build the exp table using repeated multiplication by 2 (the generator)
-	x := byte(1)
+	// Following the reference implementation approach exactly
+	poly := byte(1)
 	for i := 0; i < 255; i++ {
-		gfExp[i] = x
-		gfLog[x] = byte(i)
+		gfExp[i] = poly
+		gfLog[poly] = byte(i)
 		
-		// Multiply by 2 (generator in Rijndael's GF(256))
-		x = gfMultiplyBy2(x)
+		// Multiply poly by the polynomial x + 1 (same as reference implementation)
+		temp := uint16(poly)
+		temp = (temp << 1) ^ temp
+		
+		// Reduce poly by x^8 + x^4 + x^3 + x + 1
+		if temp&0x100 != 0 {
+			temp ^= 0x11B
+		}
+		poly = byte(temp)
 	}
-	// Complete the cycle
-	gfExp[255] = 1
+	// The 255th element wraps around to complete the cycle
+	gfExp[255] = gfExp[0]  // gfExp[255] = 1
 	// log(0) is undefined, but we set it to 0 for safety
 	gfLog[0] = 0
 }
@@ -51,6 +58,13 @@ func gfMultiplyBy2(a byte) byte {
 		return a << 1
 	}
 	return (a << 1) ^ byte(rijndaelPoly&0xFF)
+}
+
+// gfMultiplyBy3 multiplies by 3 (x + 1) in GF(256)
+// This is the correct generator for SLIP-0039 and AES specification
+func gfMultiplyBy3(a byte) byte {
+	// 3 = x + 1, so multiplication by 3 is multiplication by x plus the original value
+	return gfMultiplyBy2(a) ^ a
 }
 
 // gfPow raises a to the power of b in GF(256)

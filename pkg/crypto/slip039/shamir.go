@@ -174,12 +174,14 @@ func splitSecret(threshold, shareCount byte, secret []byte) ([][]byte, error) {
 	
 	n := len(secret)
 	
-	// Generate digest
+	// Generate digest according to SLIP-0039 spec:
+	// Generate R ∈ GF(256)^(n-4) randomly
+	// Let D be the concatenation of the first 4 bytes of HMAC-SHA256(key=R, msg=S) with the n-4 bytes of R
 	randomBytes := make([]byte, n-4)
 	if _, err := io.ReadFull(rand.Reader, randomBytes); err != nil {
 		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
 	}
-	digest := createDigest(secret, append(make([]byte, 4), randomBytes...))
+	digest := createDigest(secret, randomBytes)
 	
 	// Generate random shares for indices 0 to threshold-3
 	shares := make([][]byte, shareCount)

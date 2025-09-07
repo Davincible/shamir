@@ -87,33 +87,37 @@ func decrypt(encryptedMasterSecret []byte, passphrase string, iterationExponent 
 
 // roundFunction implements the round function F(i, R) for the Feistel network
 func roundFunction(round int, r []byte, passphrase string, iterationExponent byte, identifier uint16, extendable bool, outputLen int) []byte {
-	// Build salt
-	salt := buildSalt(r, identifier, extendable)
+	// Build salt prefix
+	saltPrefix := buildSaltPrefix(identifier, extendable)
+	
+	// Salt = salt_prefix + R (as per reference implementation)
+	salt := make([]byte, len(saltPrefix)+len(r))
+	copy(salt, saltPrefix)
+	copy(salt[len(saltPrefix):], r)
 	
 	// Build password
 	password := buildPassword(round, passphrase)
 	
-	// Calculate iterations: 10000 * 2^e
-	iterations := 10000 << iterationExponent
+	// Calculate iterations: (10000 << e) // 4 = 2500 << e (as per reference implementation)
+	iterations := 2500 << iterationExponent
 	
 	// Derive key using PBKDF2
 	return pbkdf2.Key(password, salt, iterations, outputLen, sha256.New)
 }
 
-// buildSalt constructs the salt for PBKDF2
-func buildSalt(r []byte, identifier uint16, extendable bool) []byte {
+// buildSaltPrefix constructs the salt prefix for PBKDF2 (before R is appended)
+func buildSaltPrefix(identifier uint16, extendable bool) []byte {
 	if extendable {
-		// If extendable, salt is just R
-		return r
+		// If extendable, no salt prefix
+		return []byte{}
 	}
 	
-	// If not extendable, salt is "shamir" || id || R
-	salt := make([]byte, 6+2+len(r))
-	copy(salt[:6], []byte("shamir"))
-	binary.BigEndian.PutUint16(salt[6:8], identifier)
-	copy(salt[8:], r)
+	// If not extendable, salt prefix is "shamir" || id
+	saltPrefix := make([]byte, 6+2)
+	copy(saltPrefix[:6], []byte("shamir"))
+	binary.BigEndian.PutUint16(saltPrefix[6:8], identifier)
 	
-	return salt
+	return saltPrefix
 }
 
 // buildPassword constructs the password for PBKDF2
@@ -126,39 +130,36 @@ func buildPassword(round int, passphrase string) []byte {
 	return password
 }
 
-// createDigest creates a digest for share verification
-func createDigest(secret []byte, sharedRandom []byte) []byte {
-	if len(sharedRandom) < 4 {
-		panic("shared random must be at least 4 bytes")
-	}
-	
-	// First 4 bytes of HMAC-SHA256(key=sharedRandom, msg=secret)
-	h := hmac.New(sha256.New, sharedRandom)
+// createDigest creates a digest for share verification according to SLIP-0039 spec
+// D = first 4 bytes of HMAC-SHA256(key=R, msg=S) || R
+func createDigest(secret []byte, R []byte) []byte {
+	// First 4 bytes of HMAC-SHA256(key=R, msg=secret)
+	h := hmac.New(sha256.New, R)
 	h.Write(secret)
-	digest := h.Sum(nil)
+	hmacResult := h.Sum(nil)
 	
-	// Concatenate first 4 bytes of digest with the shared random
-	result := make([]byte, len(sharedRandom))
-	copy(result[:4], digest[:4])
-	copy(result[4:], sharedRandom[4:])
+	// Concatenate first 4 bytes of HMAC with R
+	result := make([]byte, 4+len(R))
+	copy(result[:4], hmacResult[:4])
+	copy(result[4:], R)
 	
 	return result
 }
 
-// verifyDigest verifies the digest matches the secret
+// verifyDigest verifies the digest matches the secret according to SLIP-0039 spec
 func verifyDigest(secret []byte, digest []byte) bool {
 	if len(digest) < 4 {
 		return false
 	}
 	
-	// Extract shared random (all but first 4 bytes)
-	sharedRandom := digest[4:]
+	// Extract R (all bytes after first 4)
+	R := digest[4:]
 	
-	// Compute expected digest
-	h := hmac.New(sha256.New, sharedRandom)
+	// Compute expected HMAC
+	h := hmac.New(sha256.New, R)
 	h.Write(secret)
 	expected := h.Sum(nil)
 	
-	// Compare first 4 bytes
+	// Compare first 4 bytes of HMAC with first 4 bytes of digest
 	return hmac.Equal(digest[:4], expected[:4])
 }

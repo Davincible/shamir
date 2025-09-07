@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math/big"
 )
 
 // ShareCommonParameters contains parameters common to all shares in a set
@@ -83,14 +84,31 @@ func (c *SharingConfiguration) Validate() error {
 
 // encodeShareData encodes share metadata and value into bit array
 func (s *Share) encodeShareData() []int {
-	// Calculate padding
-	shareValueBits := len(s.ShareValue) * 8
-	paddingBits := (10 - (shareValueBits % 10)) % 10
-	totalBits := 20 + 20 + shareValueBits + paddingBits // metadata + share + padding
+	// The share value contains the full integer value (with padding bits)
+	// compressed into fewer bytes. We need to expand it back to words.
 	
-	if totalBits%10 != 0 {
-		panic("total bits must be divisible by 10")
+	// Convert share value bytes to a big integer
+	value := big.NewInt(0).SetBytes(s.ShareValue)
+	
+	// Calculate how many value words we need
+	// The share value is stored with padding bits compressed into it
+	// For 128-bit secret (16 bytes): needs 130 bits total = 13 words
+	// For 256-bit secret (32 bytes): needs 260 bits total = 26 words
+	shareValueBits := len(s.ShareValue) * 8
+	
+	// Calculate total bits needed (must be divisible by both 10 and have proper padding)
+	// Padding formula: we need the next multiple of 10 that gives us proper mod 16 padding
+	var totalValueBits int
+	if shareValueBits == 128 {
+		totalValueBits = 130 // 13 words * 10 bits, 2 padding bits
+	} else if shareValueBits == 256 {
+		totalValueBits = 260 // 26 words * 10 bits, 4 padding bits
+	} else {
+		// General case: find next multiple of 10 that's >= shareValueBits
+		totalValueBits = ((shareValueBits + 9) / 10) * 10
 	}
+	
+	numValueWords := totalValueBits / 10
 	
 	// Pack metadata (40 bits = 4 words)
 	metadata := uint64(0)
@@ -122,7 +140,8 @@ func (s *Share) encodeShareData() []int {
 	metadata |= uint64((s.MemberThreshold-1)&0xF) << 0
 	
 	// Convert to word array
-	words := make([]int, 0, totalBits/10)
+	totalWords := 4 + numValueWords // 4 metadata words + value words
+	words := make([]int, 0, totalWords)
 	
 	// Add metadata words (4 words)
 	words = append(words, int((metadata>>30)&0x3FF))
@@ -130,35 +149,21 @@ func (s *Share) encodeShareData() []int {
 	words = append(words, int((metadata>>10)&0x3FF))
 	words = append(words, int(metadata&0x3FF))
 	
-	// Add share value with padding
-	bitBuffer := uint32(0)
-	bitCount := 0
+	// Convert the big integer value to words
+	// We need to extract words in reverse order (from least significant)
+	// then reverse them for the final encoding
+	radix := big.NewInt(1024)
+	valueWords := make([]int, numValueWords)
+	temp := new(big.Int).Set(value)
 	
-	for _, b := range s.ShareValue {
-		bitBuffer = (bitBuffer << 8) | uint32(b)
-		bitCount += 8
-		
-		for bitCount >= 10 {
-			bitCount -= 10
-			words = append(words, int((bitBuffer>>bitCount)&0x3FF))
-		}
+	for i := numValueWords - 1; i >= 0; i-- {
+		mod := new(big.Int)
+		temp.DivMod(temp, radix, mod)
+		valueWords[i] = int(mod.Int64())
 	}
 	
-	// Add padding bits
-	if paddingBits > 0 {
-		bitBuffer <<= paddingBits
-		bitCount += paddingBits
-		
-		for bitCount >= 10 {
-			bitCount -= 10
-			words = append(words, int((bitBuffer>>bitCount)&0x3FF))
-		}
-	}
-	
-	if bitCount > 0 {
-		// This shouldn't happen if padding is correct
-		panic("leftover bits after padding")
-	}
+	// Append value words to the result
+	words = append(words, valueWords...)
 	
 	return words
 }
@@ -202,26 +207,41 @@ func decodeShareData(words []int) (*Share, error) {
 		return nil, fmt.Errorf("no share value data")
 	}
 	
-	// Convert words to bytes
-	bitBuffer := uint32(0)
-	bitCount := 0
-	shareValue := make([]byte, 0)
+	// IMPORTANT: The Python reference implementation keeps padding bits!
+	// It converts all words to a big integer (including padding) and then
+	// encodes that into the calculated byte count.
+	
+	// Use big.Int to avoid overflow with many words
+	value := big.NewInt(0)
+	radix := big.NewInt(1024)
 	
 	for _, word := range valueWords {
-		bitBuffer = (bitBuffer << 10) | uint32(word&0x3FF)
-		bitCount += 10
-		
-		for bitCount >= 8 {
-			bitCount -= 8
-			shareValue = append(shareValue, byte((bitBuffer>>bitCount)&0xFF))
-		}
+		value.Mul(value, radix)
+		value.Add(value, big.NewInt(int64(word)))
 	}
 	
-	// Remove padding (trailing zero bits)
-	// Padding is at most 8 bits (less than a full byte)
-	// We don't validate padding bits as they may contain data in some implementations
+	// Calculate the byte count based on bits WITHOUT padding
+	totalBits := len(valueWords) * 10
+	paddingBits := totalBits % 16
+	valueBits := totalBits - paddingBits
+	valueByteCount := (valueBits + 7) / 8
 	
-	share.ShareValue = shareValue
+	// Convert the FULL value (with padding) to bytes
+	shareBytes := value.Bytes()
+	
+	// Ensure we have exactly the right number of bytes
+	if len(shareBytes) < valueByteCount {
+		// Pad with zeros at the front
+		padded := make([]byte, valueByteCount)
+		copy(padded[valueByteCount-len(shareBytes):], shareBytes)
+		shareBytes = padded
+	} else if len(shareBytes) > valueByteCount {
+		// If the value is too large, we need to handle it
+		// This shouldn't happen with valid mnemonics
+		return nil, fmt.Errorf("share value too large: got %d bytes, expected %d", len(shareBytes), valueByteCount)
+	}
+	
+	share.ShareValue = shareBytes
 	
 	return share, nil
 }
