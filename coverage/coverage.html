@@ -1,0 +1,2052 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>shamir: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/Davincible/shamir/cmd/shamir/main.go (0.0%)</option>
+				
+				<option value="file1">github.com/Davincible/shamir/internal/cli/combine.go (0.0%)</option>
+				
+				<option value="file2">github.com/Davincible/shamir/internal/cli/derive.go (0.0%)</option>
+				
+				<option value="file3">github.com/Davincible/shamir/internal/cli/generate.go (0.0%)</option>
+				
+				<option value="file4">github.com/Davincible/shamir/internal/cli/split.go (0.0%)</option>
+				
+				<option value="file5">github.com/Davincible/shamir/internal/cli/verify.go (0.0%)</option>
+				
+				<option value="file6">github.com/Davincible/shamir/internal/validation/validator.go (0.0%)</option>
+				
+				<option value="file7">github.com/Davincible/shamir/pkg/crypto/hdkey/hdkey.go (91.9%)</option>
+				
+				<option value="file8">github.com/Davincible/shamir/pkg/crypto/mnemonic/mnemonic.go (89.7%)</option>
+				
+				<option value="file9">github.com/Davincible/shamir/pkg/crypto/shamir/shamir.go (89.4%)</option>
+				
+				<option value="file10">github.com/Davincible/shamir/pkg/secure/memory.go (96.2%)</option>
+				
+				<option value="file11">github.com/Davincible/shamir/pkg/storage/secure_file.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "fmt"
+        "log/slog"
+        "os"
+
+        "github.com/Davincible/shamir/internal/cli"
+        "github.com/spf13/cobra"
+)
+
+var (
+        Version   = "dev"
+        BuildTime = "unknown"
+        GitCommit = "unknown"
+)
+
+func main() <span class="cov0" title="0">{
+        logger := slog.New(slog.NewJSONHandler(os.Stderr, &amp;slog.HandlerOptions{
+                Level: slog.LevelWarn,
+        }))
+        slog.SetDefault(logger)
+
+        rootCmd := &amp;cobra.Command{
+                Use:   "shamir",
+                Short: "Secure Shamir's Secret Sharing for Ledger wallet backup",
+                Long: `Shamir is a cryptographic tool for splitting and reconstructing secrets
+using Shamir's Secret Sharing scheme. It provides secure backup solutions
+for cryptocurrency wallets, particularly Ledger devices, with BIP39/BIP44
+compatibility.`,
+                Version: fmt.Sprintf("%s (built %s, commit %s)", Version, BuildTime, GitCommit),
+        }
+
+        rootCmd.AddCommand(
+                cli.NewSplitCommand(),
+                cli.NewCombineCommand(),
+                cli.NewVerifyCommand(),
+                cli.NewDeriveCommand(),
+                cli.NewGenerateCommand(),
+        )
+
+        rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
+        rootCmd.PersistentFlags().BoolP("json", "j", false, "Output in JSON format")
+
+        if err := rootCmd.Execute(); err != nil </span><span class="cov0" title="0">{
+                slog.Error("Command execution failed", "error", err)
+                os.Exit(1)
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package cli
+
+import (
+        "bufio"
+        "encoding/hex"
+        "encoding/json"
+        "fmt"
+        "os"
+        "strings"
+
+        "github.com/Davincible/shamir/pkg/crypto/mnemonic"
+        "github.com/Davincible/shamir/pkg/crypto/shamir"
+        "github.com/Davincible/shamir/pkg/secure"
+        "github.com/fatih/color"
+        "github.com/spf13/cobra"
+)
+
+type CombineInput struct {
+        Shares []string `json:"shares"`
+}
+
+func NewCombineCommand() *cobra.Command <span class="cov0" title="0">{
+        var (
+                inputFile   string
+                outputJSON  bool
+                toMnemonic  bool
+                interactive bool
+        )
+
+        cmd := &amp;cobra.Command{
+                Use:   "combine",
+                Short: "Combine shares to reconstruct the original secret",
+                Long: `Reconstruct the original secret from a threshold number of shares
+created by the split command. Requires at least the threshold number
+of valid shares.`,
+                Example: `  # Combine shares interactively
+  shamir combine --interactive
+
+  # Combine shares from a file
+  shamir combine --input shares.json
+
+  # Reconstruct as mnemonic
+  shamir combine --interactive --mnemonic`,
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                        outputJSON, _ = cmd.Flags().GetBool("json")
+
+                        var shares []shamir.Share
+                        var err error
+
+                        if inputFile != "" </span><span class="cov0" title="0">{
+                                shares, err = readSharesFromFile(inputFile)
+                        }</span> else<span class="cov0" title="0"> if interactive </span><span class="cov0" title="0">{
+                                shares, err = readSharesInteractive()
+                        }</span> else<span class="cov0" title="0"> {
+                                return fmt.Errorf("specify either --input or --interactive")
+                        }</span>
+
+                        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to read shares: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">if len(shares) &lt; 2 </span><span class="cov0" title="0">{
+                                return fmt.Errorf("at least 2 shares are required")
+                        }</span>
+
+                        <span class="cov0" title="0">secret, err := shamir.Combine(shares)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to combine shares: %w", err)
+                        }</span>
+                        <span class="cov0" title="0">defer secure.Zero(secret)
+
+                        if toMnemonic </span><span class="cov0" title="0">{
+                                return outputMnemonic(secret, outputJSON)
+                        }</span>
+
+                        <span class="cov0" title="0">return outputSecret(secret, outputJSON)</span>
+                },
+        }
+
+        <span class="cov0" title="0">cmd.Flags().StringVarP(&amp;inputFile, "input", "i", "", "Read shares from JSON file")
+        cmd.Flags().BoolVar(&amp;interactive, "interactive", false, "Enter shares interactively")
+        cmd.Flags().BoolVar(&amp;toMnemonic, "mnemonic", false, "Output as BIP39 mnemonic phrase")
+
+        return cmd</span>
+}
+
+func readSharesFromFile(filename string) ([]shamir.Share, error) <span class="cov0" title="0">{
+        data, err := os.ReadFile(filename)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to read file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">var input struct {
+                Shares []string `json:"shares"`
+        }
+
+        if err := json.Unmarshal(data, &amp;input); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to parse JSON: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return parseShares(input.Shares)</span>
+}
+
+func readSharesInteractive() ([]shamir.Share, error) <span class="cov0" title="0">{
+        yellow := color.New(color.FgYellow)
+        green := color.New(color.FgGreen)
+
+        yellow.Println("Enter shares (one per line, empty line to finish):")
+
+        reader := bufio.NewReader(os.Stdin)
+        var shareStrings []string
+
+        for i := 1; ; i++ </span><span class="cov0" title="0">{
+                fmt.Printf("Share %d: ", i)
+
+                line, err := reader.ReadString('\n')
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+
+                <span class="cov0" title="0">line = strings.TrimSpace(line)
+                if line == "" </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov0" title="0">shareStrings = append(shareStrings, line)
+                green.Printf("✓ Share %d added\n", i)</span>
+        }
+
+        <span class="cov0" title="0">return parseShares(shareStrings)</span>
+}
+
+func parseShares(shareStrings []string) ([]shamir.Share, error) <span class="cov0" title="0">{
+        shares := make([]shamir.Share, 0, len(shareStrings))
+
+        for i, s := range shareStrings </span><span class="cov0" title="0">{
+                s = strings.TrimSpace(s)
+                if s == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov0" title="0">data, err := hex.DecodeString(s)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("invalid share %d: %w", i+1, err)
+                }</span>
+
+                <span class="cov0" title="0">shares = append(shares, shamir.Share{
+                        Index: byte(i + 1),
+                        Data:  data,
+                })</span>
+        }
+
+        <span class="cov0" title="0">return shares, nil</span>
+}
+
+func outputMnemonic(secret []byte, asJSON bool) error <span class="cov0" title="0">{
+        m, err := mnemonic.FromEntropy(secret)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to convert to mnemonic: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if asJSON </span><span class="cov0" title="0">{
+                result := map[string]interface{}{
+                        "mnemonic":   m.Words(),
+                        "word_count": m.WordCount(),
+                }
+                encoder := json.NewEncoder(os.Stdout)
+                encoder.SetIndent("", "  ")
+                return encoder.Encode(result)
+        }</span>
+
+        <span class="cov0" title="0">green := color.New(color.FgGreen, color.Bold)
+        yellow := color.New(color.FgYellow)
+
+        fmt.Println()
+        green.Println("=== RECONSTRUCTED MNEMONIC ===")
+        fmt.Println()
+
+        words := m.WordList()
+        for i, word := range words </span><span class="cov0" title="0">{
+                fmt.Printf("%2d. %s\n", i+1, word)
+        }</span>
+
+        <span class="cov0" title="0">fmt.Println()
+        yellow.Println("Full phrase:")
+        fmt.Println(m.Words())
+        fmt.Println()
+        green.Println("=== END ===")
+
+        return nil</span>
+}
+
+func outputSecret(secret []byte, asJSON bool) error <span class="cov0" title="0">{
+        if asJSON </span><span class="cov0" title="0">{
+                result := map[string]string{
+                        "secret": hex.EncodeToString(secret),
+                }
+                encoder := json.NewEncoder(os.Stdout)
+                encoder.SetIndent("", "  ")
+                return encoder.Encode(result)
+        }</span>
+
+        <span class="cov0" title="0">green := color.New(color.FgGreen, color.Bold)
+
+        fmt.Println()
+        green.Println("=== RECONSTRUCTED SECRET ===")
+        fmt.Println()
+        fmt.Println(hex.EncodeToString(secret))
+        fmt.Println()
+        green.Println("=== END ===")
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package cli
+
+import (
+        "bufio"
+        "encoding/json"
+        "fmt"
+        "os"
+        "strings"
+        "syscall"
+
+        "github.com/Davincible/shamir/pkg/crypto/hdkey"
+        "github.com/Davincible/shamir/pkg/crypto/mnemonic"
+        "github.com/Davincible/shamir/pkg/secure"
+        "github.com/fatih/color"
+        "github.com/spf13/cobra"
+        "golang.org/x/term"
+)
+
+type DeriveResult struct {
+        Path      string `json:"path"`
+        PublicKey string `json:"public_key"`
+        Address   string `json:"address,omitempty"`
+}
+
+func NewDeriveCommand() *cobra.Command <span class="cov0" title="0">{
+        var (
+                path        string
+                account     uint32
+                outputJSON  bool
+                showPrivate bool
+        )
+
+        cmd := &amp;cobra.Command{
+                Use:   "derive",
+                Short: "Derive keys from a mnemonic phrase",
+                Long: `Derive HD (Hierarchical Deterministic) keys from a BIP39 mnemonic
+phrase using BIP32/BIP44 derivation paths. Compatible with Ledger
+and other hardware wallets.`,
+                Example: `  # Derive Ethereum keys for account 0
+  shamir derive --path "m/44'/60'/0'/0/0"
+
+  # Derive Bitcoin keys
+  shamir derive --path "m/44'/0'/0'/0/0"
+
+  # Derive Ledger default path
+  shamir derive --account 0`,
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                        outputJSON, _ = cmd.Flags().GetBool("json")
+
+                        fmt.Print("Enter mnemonic phrase: ")
+                        reader := bufio.NewReader(os.Stdin)
+                        input, err := reader.ReadString('\n')
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+
+                        <span class="cov0" title="0">input = strings.TrimSpace(input)
+                        m, err := mnemonic.FromWords(input)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("invalid mnemonic: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">fmt.Print("Enter passphrase (optional): ")
+                        passphrase, err := term.ReadPassword(int(syscall.Stdin))
+                        if err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+                        <span class="cov0" title="0">fmt.Println()
+
+                        seed := m.SeedWithPassphrase(string(passphrase))
+                        defer secure.Zero(seed)
+                        secure.Zero(passphrase)
+
+                        masterKey, err := hdkey.NewMasterKey(seed)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to create master key: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">var derivedKey *hdkey.HDKey
+
+                        if path != "" </span><span class="cov0" title="0">{
+                                derivedKey, err = masterKey.DerivePath(path)
+                        }</span> else<span class="cov0" title="0"> {
+                                derivedKey, err = masterKey.DeriveLedgerPath(account)
+                                path = fmt.Sprintf("m/44'/60'/%d'/0/0", account)
+                        }</span>
+
+                        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to derive key: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">result := DeriveResult{
+                                Path:      path,
+                                PublicKey: derivedKey.PublicKeyHex(),
+                        }
+
+                        if outputJSON </span><span class="cov0" title="0">{
+                                encoder := json.NewEncoder(os.Stdout)
+                                encoder.SetIndent("", "  ")
+                                return encoder.Encode(result)
+                        }</span>
+
+                        <span class="cov0" title="0">return outputDeriveText(derivedKey, showPrivate)</span>
+                },
+        }
+
+        <span class="cov0" title="0">cmd.Flags().StringVarP(&amp;path, "path", "p", "", "BIP32 derivation path")
+        cmd.Flags().Uint32VarP(&amp;account, "account", "a", 0, "Account number for Ledger path")
+        cmd.Flags().BoolVar(&amp;showPrivate, "show-private", false, "Show private key (DANGEROUS)")
+
+        return cmd</span>
+}
+
+func outputDeriveText(key *hdkey.HDKey, showPrivate bool) error <span class="cov0" title="0">{
+        green := color.New(color.FgGreen, color.Bold)
+        yellow := color.New(color.FgYellow)
+        red := color.New(color.FgRed, color.Bold)
+
+        fmt.Println()
+        green.Println("=== DERIVED KEY ===")
+        fmt.Println()
+
+        yellow.Println("Derivation Path:")
+        fmt.Printf("  %s\n\n", key.Path())
+
+        yellow.Println("Public Key:")
+        fmt.Printf("  %s\n\n", key.PublicKeyHex())
+
+        yellow.Println("Extended Public Key:")
+        fmt.Printf("  %s\n\n", key.ExtendedPublicKey())
+
+        if showPrivate </span><span class="cov0" title="0">{
+                red.Println("⚠️  PRIVATE KEY (KEEP SECRET):")
+                fmt.Printf("  %s\n\n", key.PrivateKeyHex())
+
+                red.Println("⚠️  Extended Private Key:")
+                fmt.Printf("  %s\n\n", key.ExtendedPrivateKey())
+        }</span>
+
+        <span class="cov0" title="0">green.Println("=== END ===")
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package cli
+
+import (
+        "encoding/json"
+        "fmt"
+        "os"
+
+        "github.com/Davincible/shamir/pkg/crypto/mnemonic"
+        "github.com/fatih/color"
+        "github.com/spf13/cobra"
+)
+
+func NewGenerateCommand() *cobra.Command <span class="cov0" title="0">{
+        var (
+                wordCount  int
+                outputJSON bool
+        )
+
+        cmd := &amp;cobra.Command{
+                Use:   "generate",
+                Short: "Generate a new BIP39 mnemonic phrase",
+                Long: `Generate a new cryptographically secure BIP39 mnemonic phrase
+that can be used as a seed for cryptocurrency wallets.`,
+                Example: `  # Generate 24-word mnemonic
+  shamir generate --words 24
+
+  # Generate 12-word mnemonic (default)
+  shamir generate
+
+  # Output as JSON
+  shamir generate --json`,
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                        outputJSON, _ = cmd.Flags().GetBool("json")
+
+                        entropyBits, err := mnemonic.EntropyBitsFromWordCount(wordCount)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("invalid word count: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">m, err := mnemonic.NewMnemonic(entropyBits)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to generate mnemonic: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">if outputJSON </span><span class="cov0" title="0">{
+                                result := map[string]interface{}{
+                                        "mnemonic":   m.Words(),
+                                        "word_count": m.WordCount(),
+                                }
+                                encoder := json.NewEncoder(os.Stdout)
+                                encoder.SetIndent("", "  ")
+                                return encoder.Encode(result)
+                        }</span>
+
+                        <span class="cov0" title="0">return outputGenerateText(m)</span>
+                },
+        }
+
+        <span class="cov0" title="0">cmd.Flags().IntVarP(&amp;wordCount, "words", "w", 24, "Number of words (12, 15, 18, 21, or 24)")
+
+        return cmd</span>
+}
+
+func outputGenerateText(m *mnemonic.Mnemonic) error <span class="cov0" title="0">{
+        green := color.New(color.FgGreen, color.Bold)
+        yellow := color.New(color.FgYellow)
+        red := color.New(color.FgRed, color.Bold)
+
+        fmt.Println()
+        green.Println("=== NEW MNEMONIC PHRASE ===")
+        fmt.Println()
+
+        red.Println("⚠️  IMPORTANT SECURITY NOTICE:")
+        fmt.Println("This mnemonic phrase is your master seed. Anyone who knows this")
+        fmt.Println("phrase can access all derived accounts and steal your funds.")
+        fmt.Println()
+        fmt.Println("- Write it down on paper (never digitally)")
+        fmt.Println("- Store it in a secure location")
+        fmt.Println("- Never share it with anyone")
+        fmt.Println("- Consider using Shamir's Secret Sharing for backup")
+        fmt.Println()
+
+        yellow.Printf("Generated %d-word mnemonic:\n\n", m.WordCount())
+
+        words := m.WordList()
+        for i, word := range words </span><span class="cov0" title="0">{
+                fmt.Printf("%2d. %s\n", i+1, word)
+        }</span>
+
+        <span class="cov0" title="0">fmt.Println()
+        yellow.Println("Complete phrase:")
+        fmt.Println(m.Words())
+        fmt.Println()
+
+        green.Println("=== END ===")
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package cli
+
+import (
+        "bufio"
+        "encoding/hex"
+        "encoding/json"
+        "fmt"
+        "os"
+        "strings"
+        "syscall"
+
+        "github.com/Davincible/shamir/pkg/crypto/mnemonic"
+        "github.com/Davincible/shamir/pkg/crypto/shamir"
+        "github.com/Davincible/shamir/pkg/secure"
+        "github.com/fatih/color"
+        "github.com/spf13/cobra"
+        "golang.org/x/term"
+)
+
+type SplitResult struct {
+        Shares    []string `json:"shares"`
+        Threshold int      `json:"threshold"`
+        Total     int      `json:"total"`
+}
+
+func NewSplitCommand() *cobra.Command <span class="cov0" title="0">{
+        var (
+                parts        int
+                threshold    int
+                useStdin     bool
+                outputJSON   bool
+                fromMnemonic bool
+                outputFile   string
+        )
+
+        cmd := &amp;cobra.Command{
+                Use:   "split",
+                Short: "Split a secret into multiple shares",
+                Long: `Split a secret (seed phrase or raw data) into multiple shares using
+Shamir's Secret Sharing. The secret can be reconstructed from any
+threshold number of shares.`,
+                Example: `  # Split a mnemonic into 5 shares with threshold 3
+  shamir split --parts 5 --threshold 3 --mnemonic
+
+  # Split raw data from stdin
+  echo "secret data" | shamir split --parts 3 --threshold 2 --stdin
+
+  # Output shares to file
+  shamir split --parts 5 --threshold 3 --output shares.json`,
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                        if err := validateSplitParams(parts, threshold); err != nil </span><span class="cov0" title="0">{
+                                return err
+                        }</span>
+
+                        <span class="cov0" title="0">outputJSON, _ = cmd.Flags().GetBool("json")
+
+                        var secret []byte
+                        var err error
+
+                        if useStdin </span><span class="cov0" title="0">{
+                                secret, err = readFromStdin()
+                        }</span> else<span class="cov0" title="0"> if fromMnemonic </span><span class="cov0" title="0">{
+                                secret, err = readMnemonicInteractive()
+                        }</span> else<span class="cov0" title="0"> {
+                                secret, err = readSecretInteractive()
+                        }</span>
+
+                        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to read secret: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">defer secure.Zero(secret)
+
+                        shares, err := shamir.Split(secret, shamir.Config{
+                                Parts:     parts,
+                                Threshold: threshold,
+                        })
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("failed to split secret: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">result := SplitResult{
+                                Shares:    make([]string, len(shares)),
+                                Threshold: threshold,
+                                Total:     parts,
+                        }
+
+                        for i, share := range shares </span><span class="cov0" title="0">{
+                                result.Shares[i] = hex.EncodeToString(share.Data)
+                        }</span>
+
+                        <span class="cov0" title="0">if outputFile != "" </span><span class="cov0" title="0">{
+                                return saveToFile(result, outputFile)
+                        }</span>
+
+                        <span class="cov0" title="0">if outputJSON </span><span class="cov0" title="0">{
+                                return outputJSONResult(result)
+                        }</span>
+
+                        <span class="cov0" title="0">return outputTextResult(result)</span>
+                },
+        }
+
+        <span class="cov0" title="0">cmd.Flags().IntVarP(&amp;parts, "parts", "n", 5, "Total number of shares to create")
+        cmd.Flags().IntVarP(&amp;threshold, "threshold", "t", 3, "Minimum shares needed to reconstruct")
+        cmd.Flags().BoolVar(&amp;useStdin, "stdin", false, "Read secret from stdin")
+        cmd.Flags().BoolVar(&amp;fromMnemonic, "mnemonic", false, "Input is a BIP39 mnemonic phrase")
+        cmd.Flags().StringVarP(&amp;outputFile, "output", "o", "", "Output shares to file")
+
+        return cmd</span>
+}
+
+func validateSplitParams(parts, threshold int) error <span class="cov0" title="0">{
+        config := shamir.Config{
+                Parts:     parts,
+                Threshold: threshold,
+        }
+        return config.Validate()
+}</span>
+
+func readFromStdin() ([]byte, error) <span class="cov0" title="0">{
+        scanner := bufio.NewScanner(os.Stdin)
+        var lines []string
+
+        for scanner.Scan() </span><span class="cov0" title="0">{
+                lines = append(lines, scanner.Text())
+        }</span>
+
+        <span class="cov0" title="0">if err := scanner.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return []byte(strings.Join(lines, "\n")), nil</span>
+}
+
+func readMnemonicInteractive() ([]byte, error) <span class="cov0" title="0">{
+        fmt.Print("Enter your mnemonic phrase (12-24 words): ")
+
+        reader := bufio.NewReader(os.Stdin)
+        input, err := reader.ReadString('\n')
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">input = strings.TrimSpace(input)
+
+        m, err := mnemonic.FromWords(input)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid mnemonic: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">fmt.Print("Enter passphrase (optional, press Enter to skip): ")
+        passphrase, err := term.ReadPassword(int(syscall.Stdin))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">fmt.Println()
+
+        if len(passphrase) &gt; 0 </span><span class="cov0" title="0">{
+                m.SetPassphrase(string(passphrase))
+                secure.Zero(passphrase)
+        }</span>
+
+        <span class="cov0" title="0">return m.Entropy()</span>
+}
+
+func readSecretInteractive() ([]byte, error) <span class="cov0" title="0">{
+        fmt.Print("Enter your secret: ")
+
+        secret, err := term.ReadPassword(int(syscall.Stdin))
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">fmt.Println()
+
+        if len(secret) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("secret cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">return secret, nil</span>
+}
+
+func saveToFile(result SplitResult, filename string) error <span class="cov0" title="0">{
+        data, err := json.MarshalIndent(result, "", "  ")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to marshal result: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if err := os.WriteFile(filename, data, 0600); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to write file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">fmt.Printf("Shares saved to %s\n", filename)
+        return nil</span>
+}
+
+func outputJSONResult(result SplitResult) error <span class="cov0" title="0">{
+        encoder := json.NewEncoder(os.Stdout)
+        encoder.SetIndent("", "  ")
+        return encoder.Encode(result)
+}</span>
+
+func outputTextResult(result SplitResult) error <span class="cov0" title="0">{
+        yellow := color.New(color.FgYellow, color.Bold)
+        green := color.New(color.FgGreen)
+        red := color.New(color.FgRed, color.Bold)
+
+        fmt.Println()
+        yellow.Println("=== SHAMIR SECRET SHARES ===")
+        fmt.Println()
+
+        green.Printf("Created %d shares with threshold %d\n", result.Total, result.Threshold)
+        fmt.Printf("Any %d shares can reconstruct the original secret\n\n", result.Threshold)
+
+        red.Println("⚠️  SECURITY WARNING:")
+        fmt.Println("- Store each share in a different secure location")
+        fmt.Println("- Never store shares together or electronically")
+        fmt.Println("- Each share should be treated as highly sensitive")
+        fmt.Println()
+
+        for i, share := range result.Shares </span><span class="cov0" title="0">{
+                fmt.Printf("Share %d of %d:\n", i+1, result.Total)
+                fmt.Printf("%s\n\n", share)
+        }</span>
+
+        <span class="cov0" title="0">yellow.Println("=== END OF SHARES ===")
+
+        return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package cli
+
+import (
+        "encoding/hex"
+        "fmt"
+        "strings"
+
+        "github.com/Davincible/shamir/pkg/crypto/shamir"
+        "github.com/fatih/color"
+        "github.com/spf13/cobra"
+)
+
+func NewVerifyCommand() *cobra.Command <span class="cov0" title="0">{
+        cmd := &amp;cobra.Command{
+                Use:   "verify [share]",
+                Short: "Verify the integrity of a share",
+                Long:  `Verify that a share is valid and can be used for reconstruction.`,
+                Args:  cobra.ExactArgs(1),
+                RunE: func(cmd *cobra.Command, args []string) error </span><span class="cov0" title="0">{
+                        share := strings.TrimSpace(args[0])
+
+                        data, err := hex.DecodeString(share)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return fmt.Errorf("invalid share format: %w", err)
+                        }</span>
+
+                        <span class="cov0" title="0">s := shamir.Share{
+                                Index: 1,
+                                Data:  data,
+                        }
+
+                        if len(s.Data) &lt; 2 </span><span class="cov0" title="0">{
+                                return fmt.Errorf("share is too short")
+                        }</span>
+
+                        <span class="cov0" title="0">green := color.New(color.FgGreen, color.Bold)
+                        yellow := color.New(color.FgYellow)
+
+                        fmt.Println()
+                        green.Println("✓ Share format is valid")
+                        fmt.Println()
+
+                        yellow.Println("Share details:")
+                        fmt.Printf("  Length: %d bytes\n", len(s.Data))
+                        fmt.Printf("  Hex: %s...\n", share[:32])
+
+                        fmt.Println()
+                        fmt.Println("This share appears valid and can be used for reconstruction.")
+                        fmt.Println("Remember: you need at least the threshold number of shares.")
+
+                        return nil</span>
+                },
+        }
+
+        <span class="cov0" title="0">return cmd</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package validation
+
+import (
+        "encoding/hex"
+        "fmt"
+        "regexp"
+        "strings"
+)
+
+var (
+        hexPattern  = regexp.MustCompile(`^[0-9a-fA-F]+$`)
+        pathPattern = regexp.MustCompile(`^[mM](/\d+'?)+$`)
+)
+
+func ValidateHex(input string) error <span class="cov0" title="0">{
+        input = strings.TrimSpace(input)
+        if len(input) == 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("hex string cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">if len(input)%2 != 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("hex string must have even length")
+        }</span>
+
+        <span class="cov0" title="0">if !hexPattern.MatchString(input) </span><span class="cov0" title="0">{
+                return fmt.Errorf("invalid hex characters")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ValidateShare(share string) error <span class="cov0" title="0">{
+        if err := ValidateHex(share); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("invalid share format: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">data, err := hex.DecodeString(share)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to decode share: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if len(data) &lt; 2 </span><span class="cov0" title="0">{
+                return fmt.Errorf("share is too short")
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ValidateMnemonic(words string) error <span class="cov0" title="0">{
+        words = strings.TrimSpace(words)
+        if words == "" </span><span class="cov0" title="0">{
+                return fmt.Errorf("mnemonic cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">wordList := strings.Fields(words)
+        wordCount := len(wordList)
+
+        validCounts := []int{12, 15, 18, 21, 24}
+        valid := false
+        for _, count := range validCounts </span><span class="cov0" title="0">{
+                if wordCount == count </span><span class="cov0" title="0">{
+                        valid = true
+                        break</span>
+                }
+        }
+
+        <span class="cov0" title="0">if !valid </span><span class="cov0" title="0">{
+                return fmt.Errorf("mnemonic must have 12, 15, 18, 21, or 24 words (got %d)", wordCount)
+        }</span>
+
+        <span class="cov0" title="0">for i, word := range wordList </span><span class="cov0" title="0">{
+                if len(word) &lt; 3 || len(word) &gt; 8 </span><span class="cov0" title="0">{
+                        return fmt.Errorf("word %d has invalid length: %s", i+1, word)
+                }</span>
+
+                <span class="cov0" title="0">for _, ch := range word </span><span class="cov0" title="0">{
+                        if ch &lt; 'a' || ch &gt; 'z' </span><span class="cov0" title="0">{
+                                return fmt.Errorf("word %d contains invalid characters: %s", i+1, word)
+                        }</span>
+                }
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ValidateDerivationPath(path string) error <span class="cov0" title="0">{
+        path = strings.TrimSpace(path)
+        if path == "" </span><span class="cov0" title="0">{
+                return fmt.Errorf("derivation path cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">if !pathPattern.MatchString(path) </span><span class="cov0" title="0">{
+                return fmt.Errorf("invalid derivation path format")
+        }</span>
+
+        <span class="cov0" title="0">segments := strings.Split(path, "/")[1:]
+        for i, segment := range segments </span><span class="cov0" title="0">{
+                if segment == "" </span><span class="cov0" title="0">{
+                        return fmt.Errorf("empty segment at position %d", i)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ValidateSplitParams(parts, threshold int) error <span class="cov0" title="0">{
+        if parts &lt; 2 || parts &gt; 255 </span><span class="cov0" title="0">{
+                return fmt.Errorf("parts must be between 2 and 255 (got %d)", parts)
+        }</span>
+
+        <span class="cov0" title="0">if threshold &lt; 2 || threshold &gt; parts </span><span class="cov0" title="0">{
+                return fmt.Errorf("threshold must be between 2 and %d (got %d)", parts, threshold)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func ValidatePassphrase(passphrase string) error <span class="cov0" title="0">{
+        if len(passphrase) &gt; 256 </span><span class="cov0" title="0">{
+                return fmt.Errorf("passphrase too long (max 256 characters)")
+        }</span>
+
+        <span class="cov0" title="0">for i, ch := range passphrase </span><span class="cov0" title="0">{
+                if ch == 0 </span><span class="cov0" title="0">{
+                        return fmt.Errorf("passphrase contains null character at position %d", i)
+                }</span>
+
+                <span class="cov0" title="0">if ch &gt; 0x10FFFF </span><span class="cov0" title="0">{
+                        return fmt.Errorf("passphrase contains invalid Unicode at position %d", i)
+                }</span>
+        }
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func SanitizeInput(input string) string <span class="cov0" title="0">{
+        input = strings.TrimSpace(input)
+
+        input = strings.ReplaceAll(input, "\r\n", "\n")
+        input = strings.ReplaceAll(input, "\r", "\n")
+
+        lines := strings.Split(input, "\n")
+        for i := range lines </span><span class="cov0" title="0">{
+                lines[i] = strings.TrimSpace(lines[i])
+        }</span>
+
+        <span class="cov0" title="0">return strings.Join(lines, "\n")</span>
+}
+
+func ValidateWordCount(count int) bool <span class="cov0" title="0">{
+        validCounts := []int{12, 15, 18, 21, 24}
+        for _, valid := range validCounts </span><span class="cov0" title="0">{
+                if count == valid </span><span class="cov0" title="0">{
+                        return true
+                }</span>
+        }
+        <span class="cov0" title="0">return false</span>
+}
+
+func ValidateEntropySize(size int) bool <span class="cov0" title="0">{
+        validSizes := []int{16, 20, 24, 28, 32}
+        for _, valid := range validSizes </span><span class="cov0" title="0">{
+                if size == valid </span><span class="cov0" title="0">{
+                        return true
+                }</span>
+        }
+        <span class="cov0" title="0">return false</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package hdkey
+
+import (
+        "crypto/hmac"
+        "crypto/sha512"
+        "encoding/hex"
+        "fmt"
+        "strconv"
+        "strings"
+
+        "github.com/tyler-smith/go-bip32"
+)
+
+const (
+        HardenedKeyOffset = uint32(0x80000000)
+
+        PurposeBIP44 = uint32(44)
+        PurposeBIP49 = uint32(49)
+        PurposeBIP84 = uint32(84)
+
+        CoinTypeBitcoin  = uint32(0)
+        CoinTypeEthereum = uint32(60)
+        CoinTypeLitecoin = uint32(2)
+)
+
+type HDKey struct {
+        key        *bip32.Key
+        path       string
+        isHardened bool
+}
+
+type DerivationPath struct {
+        Purpose  uint32
+        CoinType uint32
+        Account  uint32
+        Change   uint32
+        Index    uint32
+}
+
+func NewMasterKey(seed []byte) (*HDKey, error) <span class="cov8" title="1">{
+        if len(seed) &lt; 16 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("seed must be at least 16 bytes")
+        }</span>
+
+        <span class="cov8" title="1">masterKey, err := bip32.NewMasterKey(seed)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create master key: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;HDKey{
+                key:  masterKey,
+                path: "m",
+        }, nil</span>
+}
+
+func FromExtendedKey(xkey string) (*HDKey, error) <span class="cov8" title="1">{
+        key, err := bip32.B58Deserialize(xkey)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("failed to deserialize extended key: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;HDKey{
+                key:  key,
+                path: "",
+        }, nil</span>
+}
+
+func (h *HDKey) DerivePath(path string) (*HDKey, error) <span class="cov8" title="1">{
+        path = strings.TrimSpace(path)
+        if !strings.HasPrefix(path, "m/") &amp;&amp; !strings.HasPrefix(path, "M/") </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("path must start with 'm/' or 'M/'")
+        }</span>
+
+        <span class="cov8" title="1">segments := strings.Split(path, "/")[1:]
+        currentKey := h.key
+
+        for _, segment := range segments </span><span class="cov8" title="1">{
+                if segment == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">hardened := strings.HasSuffix(segment, "'") || strings.HasSuffix(segment, "h")
+                if hardened </span><span class="cov8" title="1">{
+                        segment = strings.TrimSuffix(strings.TrimSuffix(segment, "'"), "h")
+                }</span>
+
+                <span class="cov8" title="1">index, err := strconv.ParseUint(segment, 10, 32)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("invalid path segment '%s': %w", segment, err)
+                }</span>
+
+                <span class="cov8" title="1">childIndex := uint32(index)
+                if hardened </span><span class="cov8" title="1">{
+                        childIndex += HardenedKeyOffset
+                }</span>
+
+                <span class="cov8" title="1">newKey, err := currentKey.NewChildKey(childIndex)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("failed to derive child key at index %d: %w", childIndex, err)
+                }</span>
+
+                <span class="cov8" title="1">currentKey = newKey</span>
+        }
+
+        <span class="cov8" title="1">return &amp;HDKey{
+                key:  currentKey,
+                path: path,
+        }, nil</span>
+}
+
+func (h *HDKey) DeriveAccount(purpose, coinType, account uint32) (*HDKey, error) <span class="cov8" title="1">{
+        path := fmt.Sprintf("m/%d'/%d'/%d'", purpose, coinType, account)
+        return h.DerivePath(path)
+}</span>
+
+func (h *HDKey) DeriveLedgerPath(account uint32) (*HDKey, error) <span class="cov8" title="1">{
+        return h.DeriveAccount(PurposeBIP44, CoinTypeEthereum, account)
+}</span>
+
+func (h *HDKey) DeriveAddress(change, index uint32) (*HDKey, error) <span class="cov8" title="1">{
+        changeKey, err := h.key.NewChildKey(change)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to derive change key: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">addressKey, err := changeKey.NewChildKey(index)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to derive address key: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">path := fmt.Sprintf("%s/%d/%d", h.path, change, index)
+        return &amp;HDKey{
+                key:  addressKey,
+                path: path,
+        }, nil</span>
+}
+
+func (h *HDKey) PublicKey() []byte <span class="cov8" title="1">{
+        return h.key.PublicKey().Key
+}</span>
+
+func (h *HDKey) PublicKeyHex() string <span class="cov8" title="1">{
+        return hex.EncodeToString(h.PublicKey())
+}</span>
+
+func (h *HDKey) PrivateKey() []byte <span class="cov8" title="1">{
+        return h.key.Key
+}</span>
+
+func (h *HDKey) PrivateKeyHex() string <span class="cov8" title="1">{
+        return hex.EncodeToString(h.PrivateKey())
+}</span>
+
+func (h *HDKey) ExtendedPublicKey() string <span class="cov8" title="1">{
+        return h.key.PublicKey().String()
+}</span>
+
+func (h *HDKey) ExtendedPrivateKey() string <span class="cov8" title="1">{
+        return h.key.String()
+}</span>
+
+func (h *HDKey) Fingerprint() []byte <span class="cov8" title="1">{
+        return h.key.FingerPrint
+}</span>
+
+func (h *HDKey) ChainCode() []byte <span class="cov8" title="1">{
+        return h.key.ChainCode
+}</span>
+
+func (h *HDKey) Path() string <span class="cov8" title="1">{
+        return h.path
+}</span>
+
+func (h *HDKey) IsPrivate() bool <span class="cov8" title="1">{
+        return h.key.IsPrivate
+}</span>
+
+func ParseDerivationPath(path string) (*DerivationPath, error) <span class="cov8" title="1">{
+        path = strings.TrimSpace(path)
+        if !strings.HasPrefix(path, "m/") &amp;&amp; !strings.HasPrefix(path, "M/") </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("path must start with 'm/' or 'M/'")
+        }</span>
+
+        <span class="cov8" title="1">segments := strings.Split(path, "/")[1:]
+        if len(segments) &lt; 3 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("incomplete derivation path")
+        }</span>
+
+        <span class="cov8" title="1">dp := &amp;DerivationPath{}
+
+        for i, segment := range segments[:5] </span><span class="cov8" title="1">{
+                if segment == "" </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov8" title="1">hardened := strings.HasSuffix(segment, "'") || strings.HasSuffix(segment, "h")
+                if hardened </span><span class="cov8" title="1">{
+                        segment = strings.TrimSuffix(strings.TrimSuffix(segment, "'"), "h")
+                }</span>
+
+                <span class="cov8" title="1">value, err := strconv.ParseUint(segment, 10, 32)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("invalid segment '%s': %w", segment, err)
+                }</span>
+
+                <span class="cov8" title="1">switch i </span>{
+                case 0:<span class="cov8" title="1">
+                        dp.Purpose = uint32(value)</span>
+                case 1:<span class="cov8" title="1">
+                        dp.CoinType = uint32(value)</span>
+                case 2:<span class="cov8" title="1">
+                        dp.Account = uint32(value)</span>
+                case 3:<span class="cov8" title="1">
+                        dp.Change = uint32(value)</span>
+                case 4:<span class="cov8" title="1">
+                        dp.Index = uint32(value)</span>
+                }
+        }
+
+        <span class="cov8" title="1">return dp, nil</span>
+}
+
+func (dp *DerivationPath) String() string <span class="cov8" title="1">{
+        return fmt.Sprintf("m/%d'/%d'/%d'/%d/%d",
+                dp.Purpose, dp.CoinType, dp.Account, dp.Change, dp.Index)
+}</span>
+
+func GenerateMasterKey(seed []byte) ([]byte, []byte, error) <span class="cov8" title="1">{
+        hmacKey := []byte("Bitcoin seed")
+        mac := hmac.New(sha512.New, hmacKey)
+        mac.Write(seed)
+        result := mac.Sum(nil)
+
+        privateKey := result[:32]
+        chainCode := result[32:]
+
+        return privateKey, chainCode, nil
+}</span>
+
+func ValidatePath(path string) error <span class="cov8" title="1">{
+        _, err := ParseDerivationPath(path)
+        return err
+}</span>
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package mnemonic
+
+import (
+        "crypto/sha256"
+        "crypto/sha512"
+        "encoding/hex"
+        "fmt"
+        "strings"
+
+        "github.com/tyler-smith/go-bip39"
+        "golang.org/x/crypto/pbkdf2"
+)
+
+const (
+        MinEntropyBits = 128
+        MaxEntropyBits = 256
+)
+
+type Mnemonic struct {
+        words      []string
+        passphrase string
+}
+
+func NewMnemonic(entropyBits int) (*Mnemonic, error) <span class="cov8" title="1">{
+        if entropyBits &lt; MinEntropyBits || entropyBits &gt; MaxEntropyBits </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("entropy bits must be between %d and %d", MinEntropyBits, MaxEntropyBits)
+        }</span>
+
+        <span class="cov8" title="1">if entropyBits%32 != 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("entropy bits must be a multiple of 32")
+        }</span>
+
+        <span class="cov8" title="1">entropy, err := bip39.NewEntropy(entropyBits)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate entropy: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">mnemonic, err := bip39.NewMnemonic(entropy)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate mnemonic: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Mnemonic{
+                words: strings.Split(mnemonic, " "),
+        }, nil</span>
+}
+
+func FromWords(words string) (*Mnemonic, error) <span class="cov8" title="1">{
+        words = strings.TrimSpace(words)
+        if !bip39.IsMnemonicValid(words) </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid mnemonic phrase")
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Mnemonic{
+                words: strings.Split(words, " "),
+        }, nil</span>
+}
+
+func FromEntropy(entropy []byte) (*Mnemonic, error) <span class="cov8" title="1">{
+        if len(entropy) &lt; 16 || len(entropy) &gt; 32 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("entropy must be between 16 and 32 bytes")
+        }</span>
+
+        <span class="cov8" title="1">if len(entropy)%4 != 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("entropy length must be a multiple of 4")
+        }</span>
+
+        <span class="cov8" title="1">mnemonic, err := bip39.NewMnemonic(entropy)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate mnemonic from entropy: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return &amp;Mnemonic{
+                words: strings.Split(mnemonic, " "),
+        }, nil</span>
+}
+
+func (m *Mnemonic) Words() string <span class="cov8" title="1">{
+        return strings.Join(m.words, " ")
+}</span>
+
+func (m *Mnemonic) WordList() []string <span class="cov8" title="1">{
+        result := make([]string, len(m.words))
+        copy(result, m.words)
+        return result
+}</span>
+
+func (m *Mnemonic) WordCount() int <span class="cov8" title="1">{
+        return len(m.words)
+}</span>
+
+func (m *Mnemonic) SetPassphrase(passphrase string) <span class="cov8" title="1">{
+        m.passphrase = passphrase
+}</span>
+
+func (m *Mnemonic) Seed() []byte <span class="cov8" title="1">{
+        return bip39.NewSeed(m.Words(), m.passphrase)
+}</span>
+
+func (m *Mnemonic) SeedWithPassphrase(passphrase string) []byte <span class="cov8" title="1">{
+        return bip39.NewSeed(m.Words(), passphrase)
+}</span>
+
+func (m *Mnemonic) Entropy() ([]byte, error) <span class="cov8" title="1">{
+        entropy, err := bip39.EntropyFromMnemonic(m.Words())
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to get entropy from mnemonic: %w", err)
+        }</span>
+        <span class="cov8" title="1">return entropy, nil</span>
+}
+
+func (m *Mnemonic) Validate() error <span class="cov0" title="0">{
+        if !bip39.IsMnemonicValid(m.Words()) </span><span class="cov0" title="0">{
+                return fmt.Errorf("invalid mnemonic phrase")
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func DeriveKey(mnemonic, passphrase string, iterations int) []byte <span class="cov8" title="1">{
+        if iterations &lt;= 0 </span><span class="cov8" title="1">{
+                iterations = 2048
+        }</span>
+        <span class="cov8" title="1">salt := "mnemonic" + passphrase
+        return pbkdf2.Key([]byte(mnemonic), []byte(salt), iterations, 64, sha512.New)</span>
+}
+
+func ChecksumMnemonic(mnemonic string) (string, error) <span class="cov8" title="1">{
+        entropy, err := bip39.EntropyFromMnemonic(mnemonic)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("invalid mnemonic: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">h := sha256.Sum256(entropy)
+        return hex.EncodeToString(h[:4]), nil</span>
+}
+
+func ValidateWordCount(count int) bool <span class="cov8" title="1">{
+        validCounts := []int{12, 15, 18, 21, 24}
+        for _, valid := range validCounts </span><span class="cov8" title="1">{
+                if count == valid </span><span class="cov8" title="1">{
+                        return true
+                }</span>
+        }
+        <span class="cov8" title="1">return false</span>
+}
+
+func EntropyBitsFromWordCount(wordCount int) (int, error) <span class="cov8" title="1">{
+        switch wordCount </span>{
+        case 12:<span class="cov8" title="1">
+                return 128, nil</span>
+        case 15:<span class="cov8" title="1">
+                return 160, nil</span>
+        case 18:<span class="cov8" title="1">
+                return 192, nil</span>
+        case 21:<span class="cov8" title="1">
+                return 224, nil</span>
+        case 24:<span class="cov8" title="1">
+                return 256, nil</span>
+        default:<span class="cov8" title="1">
+                return 0, fmt.Errorf("invalid word count: %d", wordCount)</span>
+        }
+}
+
+func SecureCompareWords(a, b string) bool <span class="cov8" title="1">{
+        aWords := strings.Fields(strings.TrimSpace(a))
+        bWords := strings.Fields(strings.TrimSpace(b))
+
+        if len(aWords) != len(bWords) </span><span class="cov8" title="1">{
+                return false
+        }</span>
+
+        <span class="cov8" title="1">match := true
+        for i := range aWords </span><span class="cov8" title="1">{
+                if aWords[i] != bWords[i] </span><span class="cov8" title="1">{
+                        match = false
+                }</span>
+        }
+
+        <span class="cov8" title="1">return match</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package shamir
+
+import (
+        "crypto/rand"
+        "crypto/subtle"
+        "fmt"
+        "io"
+
+        "github.com/hashicorp/vault/shamir"
+)
+
+type Share struct {
+        Index byte
+        Data  []byte
+}
+
+type Config struct {
+        Parts     int
+        Threshold int
+}
+
+func (c *Config) Validate() error <span class="cov8" title="1">{
+        if c.Parts &lt; 2 </span><span class="cov8" title="1">{
+                return fmt.Errorf("parts must be at least 2, got %d", c.Parts)
+        }</span>
+        <span class="cov8" title="1">if c.Threshold &lt; 2 </span><span class="cov8" title="1">{
+                return fmt.Errorf("threshold must be at least 2, got %d", c.Threshold)
+        }</span>
+        <span class="cov8" title="1">if c.Threshold &gt; c.Parts </span><span class="cov8" title="1">{
+                return fmt.Errorf("threshold (%d) cannot be greater than parts (%d)", c.Threshold, c.Parts)
+        }</span>
+        <span class="cov8" title="1">if c.Parts &gt; 255 </span><span class="cov8" title="1">{
+                return fmt.Errorf("parts cannot exceed 255, got %d", c.Parts)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func Split(secret []byte, config Config) ([]Share, error) <span class="cov8" title="1">{
+        if err := config.Validate(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("invalid config: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">if len(secret) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("secret cannot be empty")
+        }</span>
+
+        <span class="cov8" title="1">shares, err := shamir.Split(secret, config.Parts, config.Threshold)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to split secret: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">result := make([]Share, len(shares))
+        for i, share := range shares </span><span class="cov8" title="1">{
+                result[i] = Share{
+                        Index: byte(i + 1),
+                        Data:  share,
+                }
+        }</span>
+
+        <span class="cov8" title="1">return result, nil</span>
+}
+
+func Combine(shares []Share) ([]byte, error) <span class="cov8" title="1">{
+        if len(shares) &lt; 2 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("at least 2 shares are required for reconstruction")
+        }</span>
+
+        <span class="cov8" title="1">shareBytes := make([][]byte, len(shares))
+        for i, share := range shares </span><span class="cov8" title="1">{
+                if len(share.Data) == 0 </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("share %d has empty data", share.Index)
+                }</span>
+                <span class="cov8" title="1">shareBytes[i] = share.Data</span>
+        }
+
+        <span class="cov8" title="1">secret, err := shamir.Combine(shareBytes)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to combine shares: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return secret, nil</span>
+}
+
+func VerifyShare(share Share, expectedLen int) error <span class="cov8" title="1">{
+        if len(share.Data) != expectedLen </span><span class="cov8" title="1">{
+                return fmt.Errorf("invalid share length: expected %d, got %d", expectedLen, len(share.Data))
+        }</span>
+        <span class="cov8" title="1">if share.Index == 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("share index cannot be 0")
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func GenerateRandomBytes(n int) ([]byte, error) <span class="cov8" title="1">{
+        if n &lt;= 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("invalid length: %d", n)
+        }</span>
+
+        <span class="cov8" title="1">b := make([]byte, n)
+        if _, err := io.ReadFull(rand.Reader, b); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to generate random bytes: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">return b, nil</span>
+}
+
+func SecureCompare(a, b []byte) bool <span class="cov8" title="1">{
+        if len(a) != len(b) </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return subtle.ConstantTimeCompare(a, b) == 1</span>
+}
+
+func SecureZero(b []byte) <span class="cov8" title="1">{
+        for i := range b </span><span class="cov8" title="1">{
+                b[i] = 0
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package secure
+
+import (
+        "crypto/rand"
+        "crypto/subtle"
+        "fmt"
+        "runtime"
+        "sync"
+)
+
+type SecureBytes struct {
+        data []byte
+        mu   sync.RWMutex
+}
+
+func NewSecureBytes(size int) *SecureBytes <span class="cov8" title="1">{
+        return &amp;SecureBytes{
+                data: make([]byte, size),
+        }
+}</span>
+
+func FromBytes(data []byte) *SecureBytes <span class="cov8" title="1">{
+        sb := &amp;SecureBytes{
+                data: make([]byte, len(data)),
+        }
+        copy(sb.data, data)
+        return sb
+}</span>
+
+func (sb *SecureBytes) Set(data []byte) <span class="cov8" title="1">{
+        sb.mu.Lock()
+        defer sb.mu.Unlock()
+
+        if len(data) != len(sb.data) </span><span class="cov8" title="1">{
+                Zero(sb.data)
+                sb.data = make([]byte, len(data))
+        }</span>
+        <span class="cov8" title="1">copy(sb.data, data)</span>
+}
+
+func (sb *SecureBytes) Get() []byte <span class="cov8" title="1">{
+        sb.mu.RLock()
+        defer sb.mu.RUnlock()
+
+        result := make([]byte, len(sb.data))
+        copy(result, sb.data)
+        return result
+}</span>
+
+func (sb *SecureBytes) Clear() <span class="cov8" title="1">{
+        sb.mu.Lock()
+        defer sb.mu.Unlock()
+
+        Zero(sb.data)
+        runtime.GC()
+}</span>
+
+func (sb *SecureBytes) Len() int <span class="cov8" title="1">{
+        sb.mu.RLock()
+        defer sb.mu.RUnlock()
+        return len(sb.data)
+}</span>
+
+func (sb *SecureBytes) Destroy() <span class="cov8" title="1">{
+        sb.Clear()
+        sb.data = nil
+}</span>
+
+func Zero(b []byte) <span class="cov8" title="1">{
+        for i := range b </span><span class="cov8" title="1">{
+                b[i] = 0
+        }</span>
+        <span class="cov8" title="1">runtime.KeepAlive(b)</span>
+}
+
+func RandomOverwrite(b []byte) error <span class="cov8" title="1">{
+        if _, err := rand.Read(b); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to overwrite with random data: %w", err)
+        }</span>
+        <span class="cov8" title="1">Zero(b)
+        return nil</span>
+}
+
+func ConstantTimeCompare(x, y []byte) bool <span class="cov8" title="1">{
+        if len(x) != len(y) </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return subtle.ConstantTimeCompare(x, y) == 1</span>
+}
+
+func ConstantTimeCopy(dst, src []byte) <span class="cov8" title="1">{
+        if len(dst) != len(src) </span><span class="cov8" title="1">{
+                panic("secure: dst and src must have same length")</span>
+        }
+        <span class="cov8" title="1">subtle.ConstantTimeCopy(1, dst, src)</span>
+}
+
+type SecureString struct {
+        data *SecureBytes
+}
+
+func NewSecureString(s string) *SecureString <span class="cov8" title="1">{
+        return &amp;SecureString{
+                data: FromBytes([]byte(s)),
+        }
+}</span>
+
+func (ss *SecureString) String() string <span class="cov8" title="1">{
+        if ss.data == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov8" title="1">return string(ss.data.Get())</span>
+}
+
+func (ss *SecureString) Clear() <span class="cov8" title="1">{
+        if ss.data != nil </span><span class="cov8" title="1">{
+                ss.data.Clear()
+        }</span>
+}
+
+func (ss *SecureString) Destroy() <span class="cov8" title="1">{
+        if ss.data != nil </span><span class="cov8" title="1">{
+                ss.data.Destroy()
+                ss.data = nil
+        }</span>
+}
+
+type LockedBuffer struct {
+        data []byte
+        size int
+        mu   sync.Mutex
+}
+
+func NewLockedBuffer(size int) *LockedBuffer <span class="cov8" title="1">{
+        return &amp;LockedBuffer{
+                data: make([]byte, size),
+                size: size,
+        }
+}</span>
+
+func (lb *LockedBuffer) Write(data []byte) error <span class="cov8" title="1">{
+        lb.mu.Lock()
+        defer lb.mu.Unlock()
+
+        if len(data) &gt; lb.size </span><span class="cov8" title="1">{
+                return fmt.Errorf("data exceeds buffer size")
+        }</span>
+
+        <span class="cov8" title="1">Zero(lb.data)
+        copy(lb.data, data)
+        return nil</span>
+}
+
+func (lb *LockedBuffer) Read() []byte <span class="cov8" title="1">{
+        lb.mu.Lock()
+        defer lb.mu.Unlock()
+
+        result := make([]byte, lb.size)
+        copy(result, lb.data)
+        return result
+}</span>
+
+func (lb *LockedBuffer) Clear() <span class="cov8" title="1">{
+        lb.mu.Lock()
+        defer lb.mu.Unlock()
+
+        Zero(lb.data)
+}</span>
+
+func (lb *LockedBuffer) Destroy() <span class="cov8" title="1">{
+        lb.Clear()
+        lb.data = nil
+}</span>
+
+func ClearString(s *string) <span class="cov8" title="1">{
+        if s == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">*s = ""
+        runtime.GC()</span>
+}
+
+func ClearBytes(b *[]byte) <span class="cov8" title="1">{
+        if b == nil || *b == nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">Zero(*b)
+        *b = nil
+        runtime.GC()</span>
+}
+
+func SecureRandom(size int) ([]byte, error) <span class="cov8" title="1">{
+        b := make([]byte, size)
+        if _, err := rand.Read(b); err != nil </span><span class="cov0" title="0">{
+                Zero(b)
+                return nil, fmt.Errorf("failed to generate secure random bytes: %w", err)
+        }</span>
+        <span class="cov8" title="1">return b, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">package storage
+
+import (
+        "crypto/aes"
+        "crypto/cipher"
+        "crypto/rand"
+        "crypto/sha256"
+        "encoding/json"
+        "fmt"
+        "io"
+        "os"
+        "path/filepath"
+
+        "github.com/Davincible/shamir/pkg/secure"
+        "golang.org/x/crypto/pbkdf2"
+)
+
+const (
+        SaltSize   = 32
+        NonceSize  = 12
+        KeySize    = 32
+        Iterations = 100000
+)
+
+type SecureStorage struct {
+        filepath string
+}
+
+type EncryptedData struct {
+        Salt       []byte `json:"salt"`
+        Nonce      []byte `json:"nonce"`
+        Ciphertext []byte `json:"ciphertext"`
+}
+
+func NewSecureStorage(filepath string) *SecureStorage <span class="cov0" title="0">{
+        return &amp;SecureStorage{
+                filepath: filepath,
+        }
+}</span>
+
+func (s *SecureStorage) Save(data []byte, password []byte) error <span class="cov0" title="0">{
+        if len(password) == 0 </span><span class="cov0" title="0">{
+                return fmt.Errorf("password cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">salt := make([]byte, SaltSize)
+        if _, err := io.ReadFull(rand.Reader, salt); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to generate salt: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">key := pbkdf2.Key(password, salt, Iterations, KeySize, sha256.New)
+        defer secure.Zero(key)
+
+        block, err := aes.NewCipher(key)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create cipher: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">gcm, err := cipher.NewGCM(block)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create GCM: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">nonce := make([]byte, NonceSize)
+        if _, err := io.ReadFull(rand.Reader, nonce); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to generate nonce: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">ciphertext := gcm.Seal(nil, nonce, data, nil)
+
+        encrypted := EncryptedData{
+                Salt:       salt,
+                Nonce:      nonce,
+                Ciphertext: ciphertext,
+        }
+
+        jsonData, err := json.Marshal(encrypted)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to marshal encrypted data: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">dir := filepath.Dir(s.filepath)
+        if err := os.MkdirAll(dir, 0700); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to create directory: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if err := os.WriteFile(s.filepath, jsonData, 0600); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to write file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func (s *SecureStorage) Load(password []byte) ([]byte, error) <span class="cov0" title="0">{
+        if len(password) == 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("password cannot be empty")
+        }</span>
+
+        <span class="cov0" title="0">jsonData, err := os.ReadFile(s.filepath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to read file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">var encrypted EncryptedData
+        if err := json.Unmarshal(jsonData, &amp;encrypted); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to unmarshal encrypted data: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">key := pbkdf2.Key(password, encrypted.Salt, Iterations, KeySize, sha256.New)
+        defer secure.Zero(key)
+
+        block, err := aes.NewCipher(key)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create cipher: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">gcm, err := cipher.NewGCM(block)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to create GCM: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">plaintext, err := gcm.Open(nil, encrypted.Nonce, encrypted.Ciphertext, nil)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to decrypt: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return plaintext, nil</span>
+}
+
+func (s *SecureStorage) Exists() bool <span class="cov0" title="0">{
+        _, err := os.Stat(s.filepath)
+        return err == nil
+}</span>
+
+func (s *SecureStorage) Delete() error <span class="cov0" title="0">{
+        if !s.Exists() </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">data, err := os.ReadFile(s.filepath)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to read file for secure deletion: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if _, err := rand.Read(data); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to overwrite file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">if err := os.WriteFile(s.filepath, data, 0600); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to overwrite file: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return os.Remove(s.filepath)</span>
+}
+
+type ShareStorage struct {
+        storage *SecureStorage
+}
+
+type StoredShares struct {
+        Shares    [][]byte          `json:"shares"`
+        Threshold int               `json:"threshold"`
+        Total     int               `json:"total"`
+        Metadata  map[string]string `json:"metadata"`
+}
+
+func NewShareStorage(filepath string) *ShareStorage <span class="cov0" title="0">{
+        return &amp;ShareStorage{
+                storage: NewSecureStorage(filepath),
+        }
+}</span>
+
+func (s *ShareStorage) SaveShares(shares [][]byte, threshold, total int, password []byte) error <span class="cov0" title="0">{
+        stored := StoredShares{
+                Shares:    shares,
+                Threshold: threshold,
+                Total:     total,
+                Metadata:  make(map[string]string),
+        }
+
+        data, err := json.Marshal(stored)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to marshal shares: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return s.storage.Save(data, password)</span>
+}
+
+func (s *ShareStorage) LoadShares(password []byte) (*StoredShares, error) <span class="cov0" title="0">{
+        data, err := s.storage.Load(password)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">var stored StoredShares
+        if err := json.Unmarshal(data, &amp;stored); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("failed to unmarshal shares: %w", err)
+        }</span>
+
+        <span class="cov0" title="0">return &amp;stored, nil</span>
+}
+
+func (s *ShareStorage) Exists() bool <span class="cov0" title="0">{
+        return s.storage.Exists()
+}</span>
+
+func (s *ShareStorage) Delete() error <span class="cov0" title="0">{
+        return s.storage.Delete()
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
