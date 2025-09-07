@@ -22,6 +22,7 @@ func NewSplitCommand() *cobra.Command {
 		secretHex       string
 		secretLength    int
 		outputFile      string
+		noFiles         bool
 	)
 
 	cmd := &cobra.Command{
@@ -117,13 +118,25 @@ Examples:
 				return fmt.Errorf("failed to split secret: %w", err)
 			}
 
-			// Save to file if requested
-			if outputFile != "" {
-				return saveSlip039ToFile(mnemonics, actualGroupThreshold, groups, outputFile)
+			// Display results (always show unless --no-display is used)
+			if !noFiles || outputFile == "" {
+				displaySlip039Shares(mnemonics, actualGroupThreshold, groups)
 			}
-
-			// Display results
-			displaySlip039Shares(mnemonics, actualGroupThreshold, groups)
+			
+			// Save to file if explicitly requested
+			if outputFile != "" && !noFiles {
+				fmt.Println()
+				red := color.New(color.FgRed, color.Bold)
+				red.Println("⚠️  SECURITY WARNING: Saving shares to file!")
+				fmt.Println("• Delete this file immediately after use")
+				fmt.Println("• Never store on cloud-synced drives")
+				fmt.Println("• Use secure deletion (shred -vfz -n 3)")
+				fmt.Println()
+				
+				return saveSlip039ToFile(mnemonics, actualGroupThreshold, groups, outputFile)
+			} else if outputFile != "" && noFiles {
+				return fmt.Errorf("cannot use --output with --no-files")
+			}
 
 			// Clear sensitive data
 			for i := range masterSecret {
@@ -141,7 +154,8 @@ Examples:
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "Passphrase for encryption")
 	cmd.Flags().StringVar(&secretHex, "secret", "", "Master secret in hex")
 	cmd.Flags().IntVarP(&secretLength, "length", "l", 0, "Generate random secret of specified bytes (16 or 32)")
-	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output shares to file")
+	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output shares to file (SECURITY RISK - use only for immediate printing)")
+	cmd.Flags().BoolVar(&noFiles, "no-files", false, "Never save to files (display only)")
 
 	return cmd
 }

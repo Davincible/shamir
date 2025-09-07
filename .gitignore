@@ -1,0 +1,102 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+vendor/
+
+# Go workspace file
+go.work
+
+# Build output
+/shamir
+/cmd/shamir/shamir
+/bin/
+/dist/
+
+# IDE specific files
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+*.iml
+.DS_Store
+
+# Test and coverage files
+coverage.txt
+coverage.html
+*.prof
+*.cov
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Backup files from the CLI
+*.bak
+*.backup
+backup-*/
+shares-*/
+*.enc
+*.encrypted
+
+# Export files
+*.pdf
+*.html
+*.csv
+share_*.png
+share_*.svg
+share_*.txt
+shares_export.*
+shares_cards.*
+shares_metal.*
+
+# QR code files
+qr_*.png
+qr_*.svg
+
+# Key and wallet files (NEVER commit these!)
+*.key
+*.pem
+*.p12
+*.keystore
+wallet.json
+mnemonic.txt
+seed.txt
+private_key.txt
+
+# Test data
+test-*/
+testdata/
+*.test.json
+*.test.txt
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Debug files
+debug
+debug.test
+*.pprof
+
+# Generated documentation
+docs/_build/
+docs/_site/
+
+# OS specific
+Thumbs.db
+.Spotlight-V100
+.Trashes

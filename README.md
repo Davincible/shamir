@@ -1,13 +1,20 @@
-# Shamir - SLIP-0039 Secret Sharing Tool
+# Shamir - Advanced Secret Sharing Tool
 
-A production-ready CLI application implementing **SLIP-0039: Shamir's Secret-Sharing for Mnemonic Codes**. Compatible with Trezor and other hardware wallets supporting the SLIP-0039 standard.
+A user-friendly CLI for secure secret sharing using **SLIP-0039** (Shamir's Secret Sharing) and **BIP-39** utilities. Split passwords, crypto wallets, and sensitive data into multiple shares for ultimate security.
 
-## 🔐 Features
+## 🎯 Key Features
 
-- **Hierarchical Secret Sharing**: Two-level sharing with groups and members
-- **Mnemonic Encoding**: 20 or 33-word shares using 1024-word list
-- **Passphrase Encryption**: Built-in encryption with plausible deniability
-- **Hardware Wallet Compatible**: Works with Trezor Model T and similar devices
+### User-Friendly
+- **🧙 Interactive Wizards**: Step-by-step backup and restore guides
+- **📚 Built-in Examples**: Learn with practical tutorials
+- **✅ Share Validation**: Check compatibility before recovery
+- **🎨 Colorized Output**: Clear, readable terminal interface
+
+### Technically Robust
+- **SLIP-0039 Standard**: Compatible with Trezor hardware wallets
+- **BIP-39 Support**: Generate and manage crypto mnemonics
+- **Hierarchical Sharing**: Advanced group-based secret splitting
+- **Passphrase Protection**: Additional encryption layer
 - **RS1024 Checksum**: Reed-Solomon error detection
 - **Secure Implementation**: Memory zeroing, constant-time operations
 
@@ -27,35 +34,160 @@ go build ./cmd/shamir
 
 ## 🚀 Quick Start
 
-### Split a Secret
+### 🎓 New Users - Start Here!
 
 ```bash
-# Simple 2-of-3 sharing
+# See interactive examples and tutorials
+shamir example
+
+# Run the backup wizard (easiest way to start)
+shamir backup --test
+
+# Generate wallet addresses (MetaMask, Ledger, etc.)
+shamir wallets --list
+shamir wallets --preset ethereum --count 5
+
+# Check if your shares work together
+shamir check
+```
+
+### 💼 Common Use Cases
+
+#### Backup a Crypto Wallet
+```bash
+# Interactive wizard for BIP-39 mnemonic
+shamir backup
+
+# Or directly: 3-of-5 shares with passphrase
+shamir split -t 3 -n 5 --passphrase "secure"
+```
+
+#### Create Simple 2-of-3 Backup
+```bash
+# Generate random secret and split
 shamir split --threshold 2 --shares 3 --length 32
-
-# With passphrase protection
-shamir split --threshold 3 --shares 5 --length 32 --passphrase "my secret"
-
-# Advanced: Multiple groups
-shamir split --group-threshold 2 --groups "2/3,3/5"
 ```
 
-### Recover a Secret
-
+#### Recover Your Secret
 ```bash
-# Interactive recovery
+# Interactive restoration
+shamir restore
+
+# Or direct recovery
 shamir combine
-
-# With passphrase
-shamir combine --passphrase "my secret"
-
-# From file
-shamir combine --input shares.json
 ```
 
-## 📖 Commands
+#### Verify Shares Before Recovery
+```bash
+# Check if shares are compatible
+shamir check "share1..." "share2..."
+```
 
-### `split` - Create SLIP-0039 Shares
+## 📖 All Commands
+
+### 🔥 New Advanced Features
+
+#### `encrypt` / `decrypt` - File Encryption with Mnemonics
+Use BIP-39 mnemonics as memorable encryption keys for files and text.
+```bash
+# Encrypt a file
+shamir encrypt -i document.pdf -o document.pdf.enc
+
+# Decrypt with mnemonic
+shamir decrypt -i document.pdf.enc -o document.pdf
+
+# Encrypt text with armor (base64)
+echo "secret" | shamir encrypt --armor > secret.txt
+```
+
+#### `sign` - Message Signing with Wallet Presets
+Sign messages with any wallet address to prove ownership.
+```bash
+# Sign with MetaMask address
+shamir sign -m "I own this" --preset metamask
+
+# Sign with specific wallet index
+shamir sign -m "Proof" --preset bitcoin --index 5
+
+# Verify signature
+shamir sign --verify --signature "0x..." --public-key "0x..." -m "message"
+```
+
+#### `export` - Professional Share Export
+Export shares in various formats for printing and storage.
+```bash
+# Beautiful HTML for printing
+shamir export -i backup.json -o shares.html --format html
+
+# CSV for organization
+shamir export -i backup.json -o shares.csv --format csv
+
+# Optimized for steel plates
+shamir export -i backup.json --format metal
+```
+
+#### `qr` - QR Code Generation
+Generate QR codes for easy share backup and transfer.
+```bash
+# Generate QR codes for all shares
+shamir qr -i backup.json
+
+# Large QR for printing
+shamir qr -i backup.json --size large
+
+# SVG for laser engraving
+shamir qr -i backup.json --format svg
+```
+
+### 🧙 Interactive Commands (Recommended for Beginners)
+
+#### `wallets` - Generate Wallet Addresses
+User-friendly wallet address generation with presets for popular wallets.
+```bash
+shamir wallets --list                    # Show all presets
+shamir wallets --preset ethereum --count 5  # Generate 5 ETH addresses
+shamir wallets --preset bitcoin --count 3   # Generate BTC addresses
+shamir wallets -i                        # Interactive mode
+```
+
+**Supported Wallets:**
+- MetaMask, Ledger Live, Trezor
+- Ethereum, Bitcoin (Legacy/SegWit/Native SegWit)
+- Binance Smart Chain, Polygon, Avalanche
+- Custom paths with `--path "m/44'/60'/0'/0/%d"`
+
+#### `backup` - Interactive Backup Wizard
+Step-by-step guide to backup secrets or mnemonics.
+```bash
+shamir backup          # Interactive mode
+shamir backup --test   # Practice with test data
+```
+
+#### `restore` - Interactive Restore Wizard
+Guided recovery from SLIP-0039 shares.
+```bash
+shamir restore
+shamir restore --input backup-dir/
+```
+
+#### `check` - Verify Share Compatibility
+Check if shares can be combined for recovery.
+```bash
+shamir check           # Interactive
+shamir check "share1" "share2"  # Direct
+```
+
+#### `example` - Learn by Example
+Practical tutorials for common scenarios.
+```bash
+shamir example         # Show all examples
+shamir example wallet  # Crypto wallet backup
+shamir example family  # Estate planning
+```
+
+### ⚙️ Core Commands
+
+#### `split` - Create SLIP-0039 Shares
 
 Splits a master secret into mnemonic shares.
 
@@ -69,7 +201,7 @@ Splits a master secret into mnemonic shares.
 - `--secret`: Provide secret as hex string
 - `--output, -o`: Save shares to JSON file
 
-### `combine` - Recover Secret
+#### `combine` - Recover Secret
 
 Combines mnemonic shares to recover the original secret.
 
@@ -78,6 +210,50 @@ Combines mnemonic shares to recover the original secret.
 - `--input, -i`: Read shares from JSON file
 - `--hex`: Output as hexadecimal only
 - `--text`: Output as text only
+
+### 🔧 BIP-39 Utilities
+
+#### `generate` - Generate BIP-39 Mnemonic
+
+Creates a new BIP-39 mnemonic phrase with optional key derivation.
+
+**Options:**
+- `--words, -w`: Number of words (12, 15, 18, 21, or 24)
+- `--show-keys`: Display derived public key and address
+- `--path`: Derivation path (e.g., "m/44'/60'/0'/0/0" for Ethereum)
+- `--json, -j`: Output in JSON format
+
+**Examples:**
+```bash
+# Generate with Ethereum address
+shamir generate --show-keys
+
+# Generate with Bitcoin address
+shamir generate --path "m/44'/0'/0'/0/0"
+```
+
+#### `derive` - Derive HD Keys
+
+Derives HD keys and addresses from a BIP-39 mnemonic.
+
+**Options:**
+- `--path, -p`: BIP-32 derivation path
+- `--account, -a`: Account number for Ledger path
+- `--show-private`: Show private key (dangerous!)
+- `--json, -j`: Output in JSON format
+
+**Features:**
+- Automatically generates blockchain addresses
+- Shows Ethereum addresses for path containing '/60/'
+- Shows Bitcoin addresses for path containing '/0/'
+- Displays extended public/private keys
+
+#### `verify` - Verify Mnemonic
+
+Verifies the validity of BIP-39 mnemonics or SLIP-0039 shares.
+
+**Options:**
+- `--type`: Mnemonic type (bip39 or slip039, auto-detected)
 
 ## 🔒 Security Best Practices
 
@@ -116,59 +292,86 @@ pkg/crypto/slip039/
 - **Encryption**: 4-round Feistel with PBKDF2-SHA256
 - **Iterations**: 10000 × 2^e (default e=1, so 20000 iterations)
 
-## 🧪 Examples
+## 💡 Real-World Examples
 
-### Personal Wallet Backup
+### 🏠 Personal Use
 
+#### Secure Password Manager Backup
 ```bash
-# Generate and split 256-bit secret into 3-of-5 shares
-shamir split --threshold 3 --shares 5 --length 32 --passphrase "wallet2024"
+# Interactive wizard (recommended)
+shamir backup
 
-# Distribute shares:
-# - Share 1: Personal safe
-# - Share 2: Bank deposit box
-# - Share 3: Family member
-# - Share 4: Attorney
-# - Share 5: Second location
-
-# To recover (need any 3 shares):
-shamir combine --passphrase "wallet2024"
+# Choose option 2 (raw secret)
+# Enter your master password
+# Select "Simple 2-of-3"
+# Store shares in different locations
 ```
 
-### Organization Multi-Signature
+#### Crypto Wallet Protection
+```bash
+# For existing BIP-39 mnemonic
+shamir backup
+# Choose option 1, enter your 12-24 words
+
+# Quick 3-of-5 split
+shamir split -t 3 -n 5 --passphrase "secure2024"
+```
+
+### 👨‍👩‍👧‍👦 Family & Estate Planning
 
 ```bash
-# Create 2-level sharing: need 2 of 3 groups
-# Group 1: 2 of 3 board members
-# Group 2: 3 of 5 executives
-# Group 3: 1 of 2 IT admins
+# See detailed family example
+shamir example family
 
+# Quick setup: 2 groups needed
 shamir split \
   --group-threshold 2 \
-  --groups "2/3,3/5,1/2" \
-  --length 32 \
-  --output company-shares.json
+  --groups "1/2,2/3,1/1" \
+  --passphrase
+```
+
+### 🏢 Business Use
+
+```bash
+# See corporate example
+shamir example company
+
+# Multi-department control
+shamir split \
+  --group-threshold 2 \
+  --groups "2/3,2/4,1/2" \
+  --output recovery-plan.json
 ```
 
 ## ⚡ Quick Reference
 
 ```bash
-# Generate and split
-shamir split -t 2 -n 3 -l 32
+# 🎓 Learning
+shamir example              # Show tutorials
+shamir backup --test        # Practice mode
 
-# Recover
-shamir combine
+# 🔐 Basic Operations
+shamir split -t 2 -n 3 -l 32      # Create 2-of-3 shares
+shamir combine                     # Recover secret
+shamir check                       # Verify shares
 
-# With passphrase
-shamir split -t 2 -n 3 -l 32 -p "secret"
-shamir combine -p "secret"
+# 🛡️ With Passphrase
+shamir split -t 2 -n 3 -p "pass"  # Split with passphrase
+shamir combine -p "pass"           # Recover with passphrase
 
-# Save/load file
-shamir split -t 2 -n 3 -l 32 -o shares.json
-shamir combine -i shares.json
+# 💾 File Operations
+shamir split -o backup.json        # Save to file
+shamir combine -i backup.json      # Load from file
+shamir restore --input backup/     # Restore from directory
 
-# Advanced groups
+# 🏢 Advanced Groups
 shamir split --group-threshold 2 --groups "2/3,3/5"
+
+# 🪙 Crypto Tools
+shamir generate --words 24 --show-keys    # BIP-39 with address
+shamir wallets --preset metamask --count 5 # Generate addresses
+shamir wallets --list                      # Show wallet presets
+shamir derive --path "m/44'/60'/0'/0/0"   # Derive specific key
 ```
 
 ## 📋 Share Format

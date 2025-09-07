@@ -40,8 +40,28 @@ Features:
 	}
 
 	rootCmd.AddCommand(
+		// User-friendly commands
+		cli.NewBackupCommand(),
+		cli.NewRestoreCommand(),
+		cli.NewCheckCommand(),
+		cli.NewExampleCommand(),
+		cli.NewWalletsCommand(),
+		
+		// Core commands
 		cli.NewSplitCommand(),
 		cli.NewCombineCommand(),
+		
+		// BIP-39 utilities
+		cli.NewGenerateCommand(),
+		cli.NewDeriveCommand(),
+		cli.NewVerifyCommand(),
+		
+		// Advanced utilities
+		cli.NewEncryptCommand(),
+		cli.NewDecryptCommand(),
+		cli.NewSignCommand(),
+		cli.NewExportCommand(),
+		cli.NewQRCommand(),
 	)
 
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")
