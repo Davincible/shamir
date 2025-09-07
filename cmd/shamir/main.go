@@ -30,24 +30,18 @@ This tool provides hierarchical secret sharing with encryption, compatible
 with Trezor and other hardware wallets supporting SLIP-0039.
 
 Features:
-- SLIP-0039 standard implementation (default)
+- SLIP-0039 standard implementation
 - Two-level hierarchical sharing (groups and members)
 - Mnemonic encoding with custom wordlist
 - Passphrase encryption with plausible deniability
 - Hardware wallet compatibility (Trezor, etc.)
-- BIP32/BIP44 key derivation support
-
-For legacy non-standard shares, use 'shamir legacy' commands.`,
+- BIP32/BIP44 key derivation support`,
 		Version: fmt.Sprintf("%s (built %s, commit %s)", Version, BuildTime, GitCommit),
 	}
 
 	rootCmd.AddCommand(
-		cli.NewSplitCommandV2(),     // New SLIP-0039 split (default)
-		cli.NewCombineCommandV2(),   // New SLIP-0039 combine (default)
-		cli.NewVerifyCommand(),
-		cli.NewDeriveCommand(),
-		cli.NewGenerateCommand(),
-		cli.NewLegacyCommand(),       // Old implementation under 'legacy'
+		cli.NewSplitCommand(),
+		cli.NewCombineCommand(),
 	)
 
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose logging")

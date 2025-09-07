@@ -2,268 +2,210 @@ package cli
 
 import (
 	"bufio"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/Davincible/shamir/pkg/crypto/mnemonic"
-	"github.com/Davincible/shamir/pkg/crypto/shamir"
-	"github.com/Davincible/shamir/pkg/secure"
+	"github.com/Davincible/shamir/pkg/crypto/slip039"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
-type CombineInput struct {
-	Shares []string `json:"shares"`
-}
-
+// NewCombineCommand creates the combine command using SLIP-0039
 func NewCombineCommand() *cobra.Command {
 	var (
 		inputFile   string
-		outputJSON  bool
-		toMnemonic  bool
-		interactive bool
+		passphrase  string
+		outputHex   bool
+		outputText  bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "combine",
-		Short: "Combine shares to reconstruct the original secret",
-		Long: `Reconstruct the original secret from a threshold number of shares
-created by the split command. Requires at least the threshold number
-of valid shares.
+		Short: "Combine SLIP-0039 shares to recover secret",
+		Long: `Combine SLIP-0039 mnemonic shares to recover the original master secret.
 
-Automatically detects input formats:
-- Hex encoding (e.g., 48656c6c6f20576f726c64)
-- Base64 encoding (e.g., SGVsbG8gV29ybGQ=)
-- BIP39 mnemonic words (e.g., abandon abandon abandon...)
+Expects SLIP-0039 mnemonic shares (20 or 33 words each).
 
-Interactive mode is the default when no input method is specified.`,
-		Example: `  # Combine shares interactively (default)
+Examples:
+  # Combine shares interactively
   shamir combine
 
-  # Combine shares from a file
+  # Combine from file
   shamir combine --input shares.json
 
-  # Reconstruct as mnemonic
-  shamir combine --mnemonic`,
+  # Combine with passphrase
+  shamir combine --passphrase "my passphrase"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			outputJSON, _ = cmd.Flags().GetBool("json")
-
-			var shares []shamir.Share
-			var err error
-
+			// Read mnemonics
+			var mnemonics []string
+			
 			if inputFile != "" {
-				shares, err = readSharesFromFile(inputFile)
+				loaded, err := readSlip039FromFile(inputFile)
+				if err != nil {
+					return err
+				}
+				mnemonics = loaded
 			} else {
-				shares, err = readSharesInteractive()
+				collected, err := collectSlip039Mnemonics()
+				if err != nil {
+					return err
+				}
+				mnemonics = collected
 			}
 
+			if len(mnemonics) == 0 {
+				return fmt.Errorf("no mnemonics provided")
+			}
+
+			// Get passphrase if not provided
+			if passphrase == "" && !cmd.Flags().Changed("passphrase") {
+				pass, err := readPassphrase("Enter passphrase (press Enter if none): ")
+				if err != nil {
+					return err
+				}
+				passphrase = pass
+			}
+
+			// Combine shares
+			masterSecret, err := slip039.RecoverMasterSecret(mnemonics, passphrase)
 			if err != nil {
-				return fmt.Errorf("failed to read shares: %w", err)
+				return fmt.Errorf("failed to recover secret: %w", err)
 			}
 
-			if len(shares) < 2 {
-				return fmt.Errorf("at least 2 shares are required")
+			// Display result
+			green := color.New(color.FgGreen, color.Bold)
+			cyan := color.New(color.FgCyan, color.Bold)
+			
+			fmt.Println()
+			green.Println("✓ Successfully recovered master secret!")
+			fmt.Println()
+			
+			if outputHex {
+				cyan.Println("Master Secret (hex):")
+				fmt.Printf("%x\n", masterSecret)
+			} else if outputText {
+				cyan.Println("Master Secret (text):")
+				fmt.Printf("%s\n", string(masterSecret))
+			} else {
+				// Show both by default
+				cyan.Println("Master Secret:")
+				fmt.Printf("  Text: %s\n", string(masterSecret))
+				fmt.Printf("  Hex:  %x\n", masterSecret)
 			}
 
-			secret, err := shamir.Combine(shares)
-			if err != nil {
-				return fmt.Errorf("failed to combine shares: %w", err)
-			}
-			defer secure.Zero(secret)
-
-			if toMnemonic {
-				return outputMnemonic(secret, outputJSON)
+			// Clear sensitive data
+			for i := range masterSecret {
+				masterSecret[i] = 0
 			}
 
-			return outputSecret(secret, outputJSON)
+			return nil
 		},
 	}
 
-	cmd.Flags().StringVarP(&inputFile, "input", "i", "", "Read shares from JSON file")
-	cmd.Flags().BoolVar(&interactive, "interactive", false, "Enter shares interactively")
-	cmd.Flags().BoolVar(&toMnemonic, "mnemonic", false, "Output as BIP39 mnemonic phrase")
+	cmd.Flags().StringVarP(&inputFile, "input", "i", "", "File containing shares")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "Passphrase used during splitting")
+	cmd.Flags().BoolVar(&outputHex, "hex", false, "Output only as hexadecimal")
+	cmd.Flags().BoolVar(&outputText, "text", false, "Output only as text")
 
 	return cmd
 }
 
-func readSharesFromFile(filename string) ([]shamir.Share, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	var input struct {
-		Shares []string `json:"shares"`
-	}
-
-	if err := json.Unmarshal(data, &input); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	return parseShares(input.Shares)
-}
-
-func readSharesInteractive() ([]shamir.Share, error) {
+// collectSlip039Mnemonics interactively collects SLIP-0039 mnemonics
+func collectSlip039Mnemonics() ([]string, error) {
 	yellow := color.New(color.FgYellow)
 	green := color.New(color.FgGreen)
-	cyan := color.New(color.FgCyan)
-
-	yellow.Println("Enter shares (one per line, empty line to finish):")
-	fmt.Println("Accepts: hex, base64, or mnemonic formats")
-
+	red := color.New(color.FgRed)
+	
+	fmt.Println()
+	yellow.Println("Enter SLIP-0039 mnemonic shares (one per line)")
+	fmt.Println("Press Enter twice when done")
+	fmt.Println()
+	
 	reader := bufio.NewReader(os.Stdin)
-	var shareStrings []string
-
-	for i := 1; ; i++ {
-		fmt.Printf("Share %d: ", i)
-
+	var mnemonics []string
+	shareNum := 1
+	
+	for {
+		fmt.Printf("Share %d: ", shareNum)
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			return nil, err
 		}
-
+		
 		line = strings.TrimSpace(line)
 		if line == "" {
+			if len(mnemonics) == 0 {
+				continue // Don't break on first empty line
+			}
 			break
 		}
-
-		format := detectFormat(line)
-		shareStrings = append(shareStrings, line)
-		green.Printf("✓ Share %d added ", i)
-		cyan.Printf("(%s format)\n", format)
-	}
-
-	return parseShares(shareStrings)
-}
-
-func detectFormat(s string) string {
-	s = strings.TrimSpace(s)
-	
-	// Check if it's a valid hex string
-	if _, err := hex.DecodeString(s); err == nil && len(s)%2 == 0 {
-		return "hex"
-	}
-	
-	// Check if it's a valid base64 string
-	if _, err := base64.StdEncoding.DecodeString(s); err == nil {
-		return "base64"
-	}
-	
-	// Check if it looks like a mnemonic (multiple words)
-	words := strings.Fields(s)
-	if len(words) >= 3 { // At least 3 words to be considered a mnemonic
-		return "mnemonic"
-	}
-	
-	return "unknown"
-}
-
-func parseShareData(s string, format string) ([]byte, error) {
-	switch format {
-	case "hex":
-		return hex.DecodeString(s)
-	case "base64":
-		return base64.StdEncoding.DecodeString(s)
-	case "mnemonic":
-		m, err := mnemonic.FromWords(s)
-		if err != nil {
-			return nil, fmt.Errorf("invalid mnemonic: %w", err)
-		}
-		return m.Entropy()
-	default:
-		return nil, fmt.Errorf("unknown format: %s", format)
-	}
-}
-
-func parseShares(shareStrings []string) ([]shamir.Share, error) {
-	shares := make([]shamir.Share, 0, len(shareStrings))
-	shareIndex := byte(1)
-
-	for i, s := range shareStrings {
-		s = strings.TrimSpace(s)
-		if s == "" {
+		
+		// Validate mnemonic
+		if err := slip039.ValidateMnemonic(line); err != nil {
+			red.Printf("  ✗ Invalid share: %v\n", err)
 			continue
 		}
-
-		format := detectFormat(s)
-		if format == "unknown" {
-			return nil, fmt.Errorf("share %d: could not detect format (expected hex, base64, or mnemonic)", i+1)
+		
+		// Get share info to display
+		info, err := slip039.GetShareInfo(line)
+		if err == nil {
+			green.Printf("  ✓ Valid share (Group %d, Member %d)\n", 
+				info.GroupIndex, info.MemberIndex)
+		} else {
+			green.Println("  ✓ Valid share")
 		}
-
-		data, err := parseShareData(s, format)
-		if err != nil {
-			return nil, fmt.Errorf("share %d (%s format): %w", i+1, format, err)
-		}
-
-		shares = append(shares, shamir.Share{
-			Index: shareIndex,
-			Data:  data,
-		})
-		shareIndex++
+		
+		mnemonics = append(mnemonics, line)
+		shareNum++
 	}
-
-	return shares, nil
+	
+	if len(mnemonics) == 0 {
+		return nil, fmt.Errorf("no valid shares provided")
+	}
+	
+	fmt.Printf("\nCollected %d shares\n", len(mnemonics))
+	return mnemonics, nil
 }
 
-func outputMnemonic(secret []byte, asJSON bool) error {
-	m, err := mnemonic.FromEntropy(secret)
+// readSlip039FromFile reads SLIP-0039 shares from a JSON file
+func readSlip039FromFile(filename string) ([]string, error) {
+	file, err := os.Open(filename)
 	if err != nil {
-		return fmt.Errorf("failed to convert to mnemonic: %w", err)
+		return nil, err
+	}
+	defer file.Close()
+
+	var data struct {
+		Standard string     `json:"standard"`
+		Shares   [][]string `json:"shares"`
+		// Also support flat list for simple shares
+		FlatShares []string `json:"flat_shares"`
 	}
 
-	if asJSON {
-		result := map[string]interface{}{
-			"mnemonic":   m.Words(),
-			"word_count": m.WordCount(),
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to parse file: %w", err)
+	}
+
+	// Collect all shares
+	var mnemonics []string
+	
+	if len(data.FlatShares) > 0 {
+		mnemonics = data.FlatShares
+	} else {
+		for _, group := range data.Shares {
+			mnemonics = append(mnemonics, group...)
 		}
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
 	}
 
-	green := color.New(color.FgGreen, color.Bold)
-	yellow := color.New(color.FgYellow)
-
-	fmt.Println()
-	green.Println("=== RECONSTRUCTED MNEMONIC ===")
-	fmt.Println()
-
-	words := m.WordList()
-	for i, word := range words {
-		fmt.Printf("%2d. %s\n", i+1, word)
+	if len(mnemonics) == 0 {
+		return nil, fmt.Errorf("no shares found in file")
 	}
 
-	fmt.Println()
-	yellow.Println("Full phrase:")
-	fmt.Println(m.Words())
-	fmt.Println()
-	green.Println("=== END ===")
-
-	return nil
-}
-
-func outputSecret(secret []byte, asJSON bool) error {
-	if asJSON {
-		result := map[string]string{
-			"secret": hex.EncodeToString(secret),
-		}
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		return encoder.Encode(result)
-	}
-
-	green := color.New(color.FgGreen, color.Bold)
-
-	fmt.Println()
-	green.Println("=== RECONSTRUCTED SECRET ===")
-	fmt.Println()
-	fmt.Println(hex.EncodeToString(secret))
-	fmt.Println()
-	green.Println("=== END ===")
-
-	return nil
+	green := color.New(color.FgGreen)
+	green.Printf("Loaded %d shares from %s\n", len(mnemonics), filename)
+	
+	return mnemonics, nil
 }

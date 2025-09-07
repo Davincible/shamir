@@ -126,7 +126,7 @@ func TestShareValidation(t *testing.T) {
 }
 
 func TestShareInfo(t *testing.T) {
-	masterSecret := []byte("info test master secret bytes32")
+	masterSecret := []byte("info test master secret bytes 32")  // 32 bytes
 	passphrase := ""
 	
 	groups := []GroupConfiguration{
@@ -167,7 +167,7 @@ func TestShareInfo(t *testing.T) {
 }
 
 func TestDifferentPassphrases(t *testing.T) {
-	masterSecret := []byte("passphrase test master secret32")
+	masterSecret := []byte("passphrase test master secret 32")  // 32 bytes
 	
 	groups := SimpleConfiguration(2, 3)
 	
@@ -225,7 +225,7 @@ func TestFieldArithmetic(t *testing.T) {
 		{1, 1, 1},
 		{2, 2, 4},
 		{3, 7, 9},    // Corrected for GF(256) with Rijndael
-		{9, 11, 1},   // Corrected for GF(256) with Rijndael
+		{9, 11, 83},   // Corrected for GF(256) with Rijndael
 		{255, 1, 255},
 		{255, 255, 19}, // Corrected for GF(256) with Rijndael
 	}
