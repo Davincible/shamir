@@ -100,3 +100,6 @@ docs/_site/
 Thumbs.db
 .Spotlight-V100
 .Trashes
+
+./shamir
+shamir-backup*
