@@ -265,6 +265,10 @@ func readMnemonicWithSmartStars(prompt string) (string, error) {
 		
 		switch char {
 		case '\n', '\r': // Enter
+			// Add current word if it exists
+			if len(currentWord) > 0 {
+				completedWords = append(completedWords, string(currentWord))
+			}
 			fmt.Println()
 			return buildPassword(), nil
 			
