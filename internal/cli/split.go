@@ -28,8 +28,9 @@ func NewSplitCommand() *cobra.Command {
 		secretHex      string
 		secretLength   int
 		outputFile     string
-		noFiles        bool
 		curveType      string
+		mnemonicInput  string
+		noInteractive  bool
 	)
 
 	cmd := &cobra.Command{
@@ -144,8 +145,31 @@ Examples:
 
 				yellow := color.New(color.FgYellow, color.Bold)
 				yellow.Printf("Generated master secret: %x\n\n", masterSecret)
+			} else if mnemonicInput != "" {
+				// Direct mnemonic input via flag (SLIP-0039 only)
+				if scheme != "slip039" {
+					return fmt.Errorf("--mnemonic flag is only supported with SLIP-0039 scheme")
+				}
+				
+				// Validate BIP-39 mnemonic
+				m, err := mnemonic.FromWords(mnemonicInput)
+				if err != nil {
+					return fmt.Errorf("invalid BIP-39 mnemonic: %w", err)
+				}
+				
+				// Use the original entropy from the BIP-39 mnemonic
+				entropy, err := m.Entropy()
+				if err != nil {
+					return fmt.Errorf("failed to extract entropy from mnemonic: %w", err)
+				}
+				
+				masterSecret = entropy
+				
+				fmt.Printf("✓ Using entropy from BIP-39 mnemonic (%d bits)\n\n", len(masterSecret)*8)
 			} else {
 				// Interactive mode - ask what to do
+				reader := bufio.NewReader(os.Stdin)
+				
 				for {
 					fmt.Println("Choose secret source:")
 					fmt.Println("1. Generate new random secret (recommended)")
@@ -157,8 +181,10 @@ Examples:
 					}
 					fmt.Print("\nChoice [1]: ")
 
-					reader := bufio.NewReader(os.Stdin)
-					input, _ := reader.ReadString('\n')
+					input, err := reader.ReadString('\n')
+					if err != nil {
+						return fmt.Errorf("input error: %w", err)
+					}
 					choice := strings.TrimSpace(input)
 					
 					// Only take first character to prevent mnemonic leakage
@@ -199,24 +225,18 @@ Examples:
 								continue // Try mnemonic input again
 							}
 							
-							// Convert BIP-39 to BIP-32 master seed (SLIP-0039 standard compliance)
-							// Per SLIP-0039 spec: "use the BIP-0032 master seed as the SLIP-0039 master secret"
-							seed := m.Seed()
-							
-							// Use the first 32 bytes as the master secret (256-bit)
-							// This is the seed that would be input to HMAC-SHA512 for BIP-32 derivation
-							if len(seed) >= 32 {
-								masterSecret = seed[:32]
-							} else {
-								masterSecret = seed
-								// Pad to minimum 16 bytes if needed
-								for len(masterSecret) < 16 {
-									masterSecret = append(masterSecret, 0)
-								}
+							// Use the original entropy from the BIP-39 mnemonic
+							// This is the correct approach - share the entropy, not the derived seed
+							entropy, err := m.Entropy()
+							if err != nil {
+								return fmt.Errorf("failed to extract entropy from mnemonic: %w", err)
 							}
+							
+							masterSecret = entropy
 
-							fmt.Println("\n✓ Converted BIP-39 to BIP-32 master seed (SLIP-0039 compliant)")
-							fmt.Printf("   Master seed: %x\n", masterSecret)
+							fmt.Println("\n✓ Using original entropy from BIP-39 mnemonic")
+							fmt.Printf("   Entropy: %x (%d bits)\n", masterSecret, len(masterSecret)*8)
+							fmt.Println("   This matches the entropy shown in 'shamir generate --show-seed'")
 							break
 						}
 						break
@@ -245,7 +265,7 @@ Examples:
 			}
 
 			// Get passphrase if not provided (SLIP-0039 only)
-			if scheme == "slip039" && passphrase == "" && !cmd.Flags().Changed("passphrase") {
+			if scheme == "slip039" && passphrase == "" && !cmd.Flags().Changed("passphrase") && !noInteractive {
 				fmt.Println()
 				cyan := color.New(color.FgCyan, color.Bold)
 				cyan.Println("🔐 PASSPHRASE PROTECTION (Optional)")
@@ -285,13 +305,11 @@ Examples:
 				return fmt.Errorf("failed to split secret: %w", err)
 			}
 
-			// Display results (always show unless --no-display is used)
-			if !noFiles || outputFile == "" {
-				displayShares(shares, scheme)
-			}
+			// Always display results
+			displayShares(shares, scheme)
 
 			// Save to file if explicitly requested
-			if outputFile != "" && !noFiles {
+			if outputFile != "" {
 				fmt.Println()
 				red := color.New(color.FgRed, color.Bold)
 				red.Println("⚠️  SECURITY WARNING: Saving shares to file!")
@@ -301,8 +319,6 @@ Examples:
 				fmt.Println()
 
 				return saveSharesToFile(shares, outputFile)
-			} else if outputFile != "" && noFiles {
-				return fmt.Errorf("cannot use --output with --no-files")
 			}
 
 			// Clear sensitive data
@@ -324,7 +340,8 @@ Examples:
 	cmd.Flags().StringVar(&secretHex, "secret", "", "Master secret in hex")
 	cmd.Flags().IntVarP(&secretLength, "length", "l", 0, "Generate random secret of specified bytes (16 or 32)")
 	cmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output shares to file (SECURITY RISK - use only for immediate printing)")
-	cmd.Flags().BoolVar(&noFiles, "no-files", false, "Never save to files (display only)")
+	cmd.Flags().StringVar(&mnemonicInput, "mnemonic", "", "BIP-39 mnemonic phrase to split (SLIP-0039 only)")
+	cmd.Flags().BoolVar(&noInteractive, "no-interactive", false, "Skip all interactive prompts (use with flags)")
 
 	return cmd
 }

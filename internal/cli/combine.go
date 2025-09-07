@@ -4,21 +4,24 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/Davincible/shamir/pkg/crypto/slip039"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/tyler-smith/go-bip39"
 )
 
 // NewCombineCommand creates the combine command using SLIP-0039
 func NewCombineCommand() *cobra.Command {
 	var (
-		inputFile   string
-		passphrase  string
-		outputHex   bool
-		outputText  bool
+		inputFile    string
+		passphrase   string
+		outputHex    bool
+		outputText   bool
+		showDetails  bool
 	)
 
 	cmd := &cobra.Command{
@@ -27,16 +30,20 @@ func NewCombineCommand() *cobra.Command {
 		Long: `Combine SLIP-0039 mnemonic shares to recover the original master secret.
 
 Expects SLIP-0039 mnemonic shares (20 or 33 words each).
+Shows both the recovered entropy and reconstructed mnemonic/BIP-39 seed for comparison.
 
 Examples:
-  # Combine shares interactively
+  # Combine shares interactively  
   shamir combine
 
   # Combine from file
   shamir combine --input shares.json
 
   # Combine with passphrase
-  shamir combine --passphrase "my passphrase"`,
+  shamir combine --passphrase "my passphrase"
+  
+  # Show only hex output
+  shamir combine --hex`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Read mnemonics
 			var mnemonics []string
@@ -89,14 +96,39 @@ Examples:
 				cyan.Println("Master Secret (text):")
 				fmt.Printf("%s\n", string(masterSecret))
 			} else {
-				// Show BIP-32 master seed information (SLIP-0039 compliant)
-				cyan.Println("BIP-32 Master Seed (SLIP-0039 Recovery):")
-				fmt.Printf("  Hex:  %x\n", masterSecret)
-				fmt.Printf("  Size: %d bytes (%d bits)\n", len(masterSecret), len(masterSecret)*8)
+				// Show recovered entropy and derived information
+				cyan.Println("=== RECOVERY RESULTS ===")
 				fmt.Println()
-				fmt.Println("💡 This is your BIP-32 master seed recovered from SLIP-0039 shares.")
-				fmt.Println("   Use this seed to restore your wallet in any BIP-32 compatible wallet.")
-				fmt.Println("   This seed is what was originally derived from your BIP-39 mnemonic.")
+				
+				yellow := color.New(color.FgYellow)
+				yellow.Println("🎲 Recovered Entropy (Original Random Data):")
+				fmt.Printf("%x\n", masterSecret)
+				fmt.Printf("Length: %d bytes (%d bits)\n", len(masterSecret), len(masterSecret)*8)
+				fmt.Println()
+				fmt.Println("💡 This is the original entropy that was shared using SLIP-0039")
+				fmt.Println()
+				
+				// Try to reconstruct the original mnemonic and BIP-39 seed
+				if showDetails || true { // Always show by default now
+					reconstructedMnemonic, err := bip39.NewMnemonic(masterSecret)
+					if err == nil {
+						yellow.Println("🔤 Reconstructed Mnemonic:")
+						fmt.Println(reconstructedMnemonic)
+						fmt.Println()
+						
+						// Generate BIP-39 seed from reconstructed mnemonic
+						bip39Seed := bip39.NewSeed(reconstructedMnemonic, "")
+						
+						yellow.Println("🔑 BIP-39 Master Seed (for HD Wallet):")
+						fmt.Printf("%x\n", bip39Seed)
+						fmt.Printf("Length: %d bytes (%d bits)\n", len(bip39Seed), len(bip39Seed)*8)
+						fmt.Println()
+						fmt.Println("💡 This matches the BIP-39 seed from 'shamir generate --show-seed'")
+					} else {
+						yellow.Println("ℹ️  Could not reconstruct mnemonic (entropy may not be from BIP-39)")
+						fmt.Printf("   Error: %v\n", err)
+					}
+				}
 			}
 
 			// Clear sensitive data
@@ -112,6 +144,7 @@ Examples:
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "p", "", "Passphrase used during splitting")
 	cmd.Flags().BoolVar(&outputHex, "hex", false, "Output only as hexadecimal")
 	cmd.Flags().BoolVar(&outputText, "text", false, "Output only as text")
+	cmd.Flags().BoolVar(&showDetails, "details", false, "Show detailed cryptographic breakdown")
 
 	return cmd
 }
@@ -173,7 +206,7 @@ func collectSlip039Mnemonics() ([]string, error) {
 	return mnemonics, nil
 }
 
-// readSlip039FromFile reads SLIP-0039 shares from a JSON file
+// readSlip039FromFile reads SLIP-0039 shares from a file (JSON or plain text)
 func readSlip039FromFile(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -181,6 +214,25 @@ func readSlip039FromFile(filename string) ([]string, error) {
 	}
 	defer file.Close()
 
+	// Read the entire file content
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Try to detect format by checking if it starts with '{' (JSON)
+	trimmed := strings.TrimSpace(string(content))
+	if strings.HasPrefix(trimmed, "{") {
+		// JSON format
+		return readFromJSON(content, filename)
+	} else {
+		// Plain text format (one share per line)
+		return readFromPlainText(content, filename)
+	}
+}
+
+// readFromJSON parses JSON format files
+func readFromJSON(content []byte, filename string) ([]string, error) {
 	var data struct {
 		Standard string     `json:"standard"`
 		Shares   [][]string `json:"shares"`
@@ -188,9 +240,8 @@ func readSlip039FromFile(filename string) ([]string, error) {
 		FlatShares []string `json:"flat_shares"`
 	}
 
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&data); err != nil {
-		return nil, fmt.Errorf("failed to parse file: %w", err)
+	if err := json.Unmarshal(content, &data); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON file: %w", err)
 	}
 
 	// Collect all shares
@@ -205,11 +256,41 @@ func readSlip039FromFile(filename string) ([]string, error) {
 	}
 
 	if len(mnemonics) == 0 {
-		return nil, fmt.Errorf("no shares found in file")
+		return nil, fmt.Errorf("no shares found in JSON file")
 	}
 
 	green := color.New(color.FgGreen)
-	green.Printf("Loaded %d shares from %s\n", len(mnemonics), filename)
+	green.Printf("Loaded %d shares from JSON file %s\n", len(mnemonics), filename)
+	
+	return mnemonics, nil
+}
+
+// readFromPlainText parses plain text format files (one share per line)
+func readFromPlainText(content []byte, filename string) ([]string, error) {
+	lines := strings.Split(string(content), "\n")
+	var mnemonics []string
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue // Skip empty lines
+		}
+		
+		// Basic validation - should be a mnemonic phrase
+		words := strings.Fields(line)
+		if len(words) < 10 { // SLIP-0039 shares are typically 20 or 33 words
+			continue // Skip lines that are clearly not mnemonic shares
+		}
+		
+		mnemonics = append(mnemonics, line)
+	}
+
+	if len(mnemonics) == 0 {
+		return nil, fmt.Errorf("no valid shares found in text file")
+	}
+
+	green := color.New(color.FgGreen)
+	green.Printf("Loaded %d shares from text file %s\n", len(mnemonics), filename)
 	
 	return mnemonics, nil
 }
