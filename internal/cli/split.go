@@ -36,6 +36,7 @@ func NewSplitCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "split",
 		Short: "Split a secret using various Secret Sharing Schemes",
+		SilenceUsage: true,
 		Long: `Split a master secret using different Secret Sharing Schemes:
 - SLIP-0039: Hierarchical sharing with mnemonic encoding (default)
 - PVSS: Publicly Verifiable Secret Sharing with elliptic curve cryptography
@@ -163,9 +164,27 @@ Examples:
 					return fmt.Errorf("failed to extract entropy from mnemonic: %w", err)
 				}
 				
-				masterSecret = entropy
-				
-				fmt.Printf("✓ Using entropy from BIP-39 mnemonic (%d bits)\n\n", len(masterSecret)*8)
+				// If passphrase provided, encrypt the entropy before sharing
+				if passphrase != "" {
+					// Encrypt entropy using SLIP-0039 encryption (need to pad for even length)
+					paddedEntropy := entropy
+					if len(entropy)%2 != 0 {
+						paddedEntropy = append(entropy, 0) // Pad with zero byte
+					}
+					
+					encrypted, err := slip039.EncryptMasterSecret(paddedEntropy, passphrase, 0, 0, true)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt entropy: %w", err)
+					}
+					masterSecret = encrypted
+					
+					fmt.Printf("✓ Using encrypted entropy from BIP-39 mnemonic (%d bits)\n", len(entropy)*8)
+					fmt.Println("🔐 Entropy encrypted with passphrase before sharing")
+					fmt.Println()
+				} else {
+					masterSecret = entropy
+					fmt.Printf("✓ Using entropy from BIP-39 mnemonic (%d bits)\n\n", len(masterSecret)*8)
+				}
 			} else {
 				// Interactive mode - ask what to do
 				reader := bufio.NewReader(os.Stdin)
@@ -232,8 +251,9 @@ Examples:
 								return fmt.Errorf("failed to extract entropy from mnemonic: %w", err)
 							}
 							
+							// Store entropy - we'll encrypt it later after passphrase is collected
 							masterSecret = entropy
-
+							
 							fmt.Println("\n✓ Using original entropy from BIP-39 mnemonic")
 							fmt.Printf("   Entropy: %x (%d bits)\n", masterSecret, len(masterSecret)*8)
 							fmt.Println("   This matches the entropy shown in 'shamir generate --show-seed'")
@@ -294,6 +314,33 @@ Examples:
 				fmt.Println()
 
 				passphrase = pass
+			}
+			
+			// Apply entropy encryption if we have a BIP-39 mnemonic and passphrase
+			// This handles interactive mnemonic input where passphrase is collected after entropy extraction
+			// Skip if mnemonic was provided via flag (already handled above)
+			if scheme == "slip039" && passphrase != "" && mnemonicInput == "" {
+				// Check if masterSecret looks like BIP-39 entropy (reasonable size)
+				if len(masterSecret) == 16 || len(masterSecret) == 20 || len(masterSecret) == 24 || len(masterSecret) == 28 || len(masterSecret) == 32 {
+					// This looks like BIP-39 entropy, encrypt it
+					originalEntropy := make([]byte, len(masterSecret))
+					copy(originalEntropy, masterSecret)
+					
+					// Encrypt entropy using SLIP-0039 encryption (need to pad for even length)
+					paddedEntropy := originalEntropy
+					if len(originalEntropy)%2 != 0 {
+						paddedEntropy = append(originalEntropy, 0) // Pad with zero byte
+					}
+					
+					encrypted, err := slip039.EncryptMasterSecret(paddedEntropy, passphrase, 0, 0, true)
+					if err != nil {
+						return fmt.Errorf("failed to encrypt entropy: %w", err)
+					}
+					masterSecret = encrypted
+					
+					fmt.Printf("🔐 Entropy encrypted with passphrase before sharing (%d bits)\n", len(originalEntropy)*8)
+					fmt.Println()
+				}
 			}
 			
 			// Set passphrase in config

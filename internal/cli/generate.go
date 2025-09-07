@@ -26,6 +26,7 @@ func NewGenerateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "generate",
 		Short: "Generate a new BIP39 mnemonic phrase",
+		SilenceUsage: true,
 		Long: `Generate a new cryptographically secure BIP39 mnemonic phrase
 that can be used as a seed for cryptocurrency wallets.`,
 		Example: `  # Generate 24-word mnemonic with keys and seed

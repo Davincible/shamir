@@ -163,3 +163,15 @@ func verifyDigest(secret []byte, digest []byte) bool {
 	// Compare first 4 bytes of HMAC with first 4 bytes of digest
 	return hmac.Equal(digest[:4], expected[:4])
 }
+
+// EncryptMasterSecret encrypts a master secret using SLIP-0039 encryption
+// This is useful for encrypting entropy before sharing
+func EncryptMasterSecret(masterSecret []byte, passphrase string, iterationExponent byte, identifier uint16, extendable bool) ([]byte, error) {
+	return encrypt(masterSecret, passphrase, iterationExponent, identifier, extendable)
+}
+
+// DecryptMasterSecret decrypts an encrypted master secret using SLIP-0039 decryption  
+// This is useful for decrypting entropy after combining shares
+func DecryptMasterSecret(encryptedMasterSecret []byte, passphrase string, iterationExponent byte, identifier uint16, extendable bool) ([]byte, error) {
+	return decrypt(encryptedMasterSecret, passphrase, iterationExponent, identifier, extendable)
+}

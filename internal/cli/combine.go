@@ -27,6 +27,7 @@ func NewCombineCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "combine",
 		Short: "Combine SLIP-0039 shares to recover secret",
+		SilenceUsage: true,
 		Long: `Combine SLIP-0039 mnemonic shares to recover the original master secret.
 
 Expects SLIP-0039 mnemonic shares (20 or 33 words each).
@@ -81,20 +82,51 @@ Examples:
 				return fmt.Errorf("failed to recover secret: %w", err)
 			}
 
+			// Check if we need to decrypt the recovered secret (entropy encryption)
+			// We attempt to decrypt with the same passphrase - if it works, it was encrypted
+			var entropy []byte
+			var wasEncrypted bool
+			
+			if passphrase != "" {
+				// Try to decrypt - if this succeeds, the entropy was encrypted before sharing
+				decrypted, err := slip039.DecryptMasterSecret(masterSecret, passphrase, 0, 0, true)
+				if err == nil {
+					// Successfully decrypted - this was encrypted entropy
+					entropy = decrypted
+					wasEncrypted = true
+					
+					// Remove padding if present (16-byte entropy becomes 17 bytes when padded)
+					if len(entropy) == 17 && entropy[16] == 0 {
+						entropy = entropy[:16]
+					}
+				} else {
+					// Decryption failed - treat as raw entropy
+					entropy = masterSecret
+					wasEncrypted = false
+				}
+			} else {
+				// No passphrase provided - treat as raw entropy
+				entropy = masterSecret
+				wasEncrypted = false
+			}
+
 			// Display result
 			green := color.New(color.FgGreen, color.Bold)
 			cyan := color.New(color.FgCyan, color.Bold)
 			
 			fmt.Println()
 			green.Println("✓ Successfully recovered master secret!")
+			if wasEncrypted {
+				green.Println("✓ Successfully decrypted entropy!")
+			}
 			fmt.Println()
 			
 			if outputHex {
 				cyan.Println("Master Secret (hex):")
-				fmt.Printf("%x\n", masterSecret)
+				fmt.Printf("%x\n", entropy)
 			} else if outputText {
 				cyan.Println("Master Secret (text):")
-				fmt.Printf("%s\n", string(masterSecret))
+				fmt.Printf("%s\n", string(entropy))
 			} else {
 				// Show recovered entropy and derived information
 				cyan.Println("=== RECOVERY RESULTS ===")
@@ -102,15 +134,18 @@ Examples:
 				
 				yellow := color.New(color.FgYellow)
 				yellow.Println("🎲 Recovered Entropy (Original Random Data):")
-				fmt.Printf("%x\n", masterSecret)
-				fmt.Printf("Length: %d bytes (%d bits)\n", len(masterSecret), len(masterSecret)*8)
+				fmt.Printf("%x\n", entropy)
+				fmt.Printf("Length: %d bytes (%d bits)\n", len(entropy), len(entropy)*8)
+				if wasEncrypted {
+					fmt.Println("🔓 Entropy was encrypted before sharing and has been decrypted")
+				}
 				fmt.Println()
 				fmt.Println("💡 This is the original entropy that was shared using SLIP-0039")
 				fmt.Println()
 				
 				// Try to reconstruct the original mnemonic and BIP-39 seed
 				if showDetails || true { // Always show by default now
-					reconstructedMnemonic, err := bip39.NewMnemonic(masterSecret)
+					reconstructedMnemonic, err := bip39.NewMnemonic(entropy)
 					if err == nil {
 						yellow.Println("🔤 Reconstructed Mnemonic:")
 						fmt.Println(reconstructedMnemonic)
@@ -134,6 +169,9 @@ Examples:
 			// Clear sensitive data
 			for i := range masterSecret {
 				masterSecret[i] = 0
+			}
+			for i := range entropy {
+				entropy[i] = 0
 			}
 
 			return nil
@@ -179,6 +217,14 @@ func collectSlip039Mnemonics() ([]string, error) {
 			break
 		}
 		
+		// Clean up common prefixes that might be pasted with shares
+		line = cleanShareInput(line)
+		
+		// Skip if line became empty after cleaning
+		if line == "" {
+			continue
+		}
+		
 		// Validate mnemonic
 		if err := slip039.ValidateMnemonic(line); err != nil {
 			red.Printf("  ✗ Invalid share: %v\n", err)
@@ -204,6 +250,37 @@ func collectSlip039Mnemonics() ([]string, error) {
 	
 	fmt.Printf("\nCollected %d shares\n", len(mnemonics))
 	return mnemonics, nil
+}
+
+// cleanShareInput removes common prefixes from pasted share input
+func cleanShareInput(input string) string {
+	input = strings.TrimSpace(input)
+	
+	// Remove common prefixes like "Share 1:", "Share 2:", etc.
+	// Match pattern: "Share" + space + number + ":" + space
+	if strings.HasPrefix(strings.ToLower(input), "share ") {
+		// Find the colon and remove everything up to and including it
+		colonIndex := strings.Index(input, ":")
+		if colonIndex != -1 && colonIndex < 20 { // Reasonable limit for "Share X:"
+			input = strings.TrimSpace(input[colonIndex+1:])
+		}
+	}
+	
+	// Remove other common prefixes
+	prefixes := []string{
+		"Share:",
+		"Mnemonic:",
+		"Words:",
+	}
+	
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(strings.ToLower(input), strings.ToLower(prefix)) {
+			input = strings.TrimSpace(input[len(prefix):])
+			break
+		}
+	}
+	
+	return input
 }
 
 // readSlip039FromFile reads SLIP-0039 shares from a file (JSON or plain text)
@@ -274,6 +351,14 @@ func readFromPlainText(content []byte, filename string) ([]string, error) {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue // Skip empty lines
+		}
+		
+		// Clean up common prefixes that might be in the file
+		line = cleanShareInput(line)
+		
+		// Skip if line became empty after cleaning
+		if line == "" {
+			continue
 		}
 		
 		// Basic validation - should be a mnemonic phrase
