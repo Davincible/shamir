@@ -195,7 +195,7 @@ Examples:
 								fmt.Println("• You entered all words correctly (typically 12, 18, or 24 words)")
 								fmt.Println("• Words are separated by single spaces")
 								fmt.Println("• All words are from the BIP-39 word list")
-								fmt.Println("\nTry again or press Ctrl+C to exit.\n")
+								fmt.Println("\nTry again or press Ctrl+C to exit.")
 								continue // Try mnemonic input again
 							}
 							

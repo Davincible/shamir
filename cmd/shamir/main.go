@@ -40,6 +40,10 @@ Features:
 	}
 
 	rootCmd.AddCommand(
+		// Enhanced unified commands
+		cli.NewShareCommand(),
+		cli.NewManageCommand(),
+		
 		// User-friendly commands
 		cli.NewBackupCommand(),
 		cli.NewRestoreCommand(),
