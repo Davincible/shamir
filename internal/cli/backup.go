@@ -226,11 +226,11 @@ func runBackupWizard(outputDir string, testMode bool) error {
 			passphrase = "test-passphrase"
 			yellow.Println("Using test passphrase:", passphrase)
 		} else {
-			pass, err := readPassphrase("Enter passphrase: ")
+			pass, err := readPasswordWithStars("Enter passphrase: ")
 			if err != nil {
 				return err
 			}
-			pass2, err := readPassphrase("Confirm passphrase: ")
+			pass2, err := readPasswordWithStars("Confirm passphrase: ")
 			if err != nil {
 				return err
 			}

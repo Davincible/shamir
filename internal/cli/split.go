@@ -6,23 +6,25 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Davincible/shamir/pkg/crypto/slip039"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/Davincible/shamir/pkg/crypto/mnemonic"
+	"github.com/Davincible/shamir/pkg/crypto/slip039"
 )
 
 // NewSplitCommand creates the split command using SLIP-0039
 func NewSplitCommand() *cobra.Command {
 	var (
-		threshold       int
-		shares          int
-		groupThreshold  int
-		groupsSpec      string
-		passphrase      string
-		secretHex       string
-		secretLength    int
-		outputFile      string
-		noFiles         bool
+		threshold      int
+		shares         int
+		groupThreshold int
+		groupsSpec     string
+		passphrase     string
+		secretHex      string
+		secretLength   int
+		outputFile     string
+		noFiles        bool
 	)
 
 	cmd := &cobra.Command{
@@ -33,7 +35,15 @@ hierarchical Shamir's Secret Sharing with encryption.
 
 Compatible with Trezor and other hardware wallets supporting SLIP-0039.
 
+DEFAULT: Creates 3-of-5 shares with a new random secret if no options provided.
+
+SECURITY: Shares are displayed on screen by default. Use --output only for
+immediate printing, then delete the file with secure deletion tools.
+
 Examples:
+  # Use defaults (3-of-5 with random secret)
+  shamir split
+
   # Simple 2-of-3 sharing
   shamir split --threshold 2 --shares 3
 
@@ -41,7 +51,10 @@ Examples:
   shamir split --threshold 3 --shares 5 --length 32
 
   # Advanced: Multiple groups
-  shamir split --group-threshold 2 --groups "2/3,3/5"`,
+  shamir split --group-threshold 2 --groups "2/3,3/5"
+  
+  # With passphrase protection
+  shamir split --passphrase "mysecret"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Use SLIP-0039
 			var groups []slip039.GroupConfiguration
@@ -55,16 +68,28 @@ Examples:
 					return fmt.Errorf("invalid groups specification: %w", err)
 				}
 				groups = parsedGroups
-				
+
 				if groupThreshold <= 0 || groupThreshold > len(groups) {
 					groupThreshold = len(groups) // Default to all groups
 				}
 				actualGroupThreshold = byte(groupThreshold)
 			} else {
-				// Simple mode
-				if threshold <= 0 || shares <= 0 {
-					return fmt.Errorf("--threshold and --shares are required")
+				// Simple mode with defaults
+				if threshold <= 0 && shares <= 0 {
+					// Default to 3-of-5 if nothing specified
+					threshold = 3
+					shares = 5
+					fmt.Println("Using default configuration: 3-of-5 shares")
+					fmt.Println("(Use --threshold and --shares to customize)")
+					fmt.Println()
+				} else if threshold <= 0 || shares <= 0 {
+					return fmt.Errorf("both --threshold and --shares must be specified together")
 				}
+
+				if threshold > shares {
+					return fmt.Errorf("threshold cannot be greater than number of shares")
+				}
+
 				groups = slip039.SimpleConfiguration(byte(threshold), byte(shares))
 				actualGroupThreshold = 1
 			}
@@ -86,24 +111,108 @@ Examples:
 					return fmt.Errorf("failed to generate secret: %w", err)
 				}
 				masterSecret = generated
-				
+
 				yellow := color.New(color.FgYellow, color.Bold)
 				yellow.Printf("Generated master secret: %x\n\n", masterSecret)
 			} else {
-				// Read secret interactively
-				secret, err := readSecretInteractive()
-				if err != nil {
-					return err
+				// Interactive mode - ask what to do
+				for {
+					fmt.Println("Choose secret source:")
+					fmt.Println("1. Generate new random secret (recommended)")
+					fmt.Println("2. Enter BIP-39 mnemonic phrase")
+					fmt.Println("3. Enter raw secret (hex or text)")
+					fmt.Print("\nChoice [1]: ")
+
+					var choice string
+					fmt.Scanln(&choice)
+
+					if choice == "" || choice == "1" {
+						// Generate random 256-bit secret by default
+						generated, err := slip039.GenerateMasterSecret(32)
+						if err != nil {
+							return fmt.Errorf("failed to generate secret: %w", err)
+						}
+						masterSecret = generated
+						green := color.New(color.FgGreen, color.Bold)
+						green.Println("✓ Generated 256-bit random secret")
+						fmt.Println()
+						break
+					} else if choice == "2" {
+						// BIP-39 mnemonic input (with stars)
+						for {
+							mnemonicInput, err := readPasswordWithStars("Enter BIP-39 mnemonic: ")
+							if err != nil {
+								return err
+							}
+
+							// Convert BIP-39 mnemonic to seed (first 32 bytes)
+							m, err := mnemonic.FromWords(mnemonicInput)
+							if err != nil {
+								red := color.New(color.FgRed, color.Bold)
+								red.Println("\n❌ Invalid BIP-39 mnemonic phrase")
+								fmt.Println("\nPlease check that:")
+								fmt.Println("• You entered all words correctly (typically 12, 18, or 24 words)")
+								fmt.Println("• Words are separated by single spaces")
+								fmt.Println("• All words are from the BIP-39 word list")
+								fmt.Println("\nTry again or press Ctrl+C to exit.\n")
+								continue // Try mnemonic input again
+							}
+							seed := m.Seed()
+							masterSecret = seed[:32] // Use first 32 bytes (256-bit)
+
+							fmt.Println("\n✓ Using 256-bit seed derived from BIP-39 mnemonic")
+							break
+						}
+						break
+					} else {
+						// Raw secret input
+						secret, err := readSecretInteractive()
+						if err != nil {
+							return err
+						}
+
+						// Ensure reasonable length for SLIP-0039
+						if len(secret) > 32 {
+							yellow := color.New(color.FgYellow)
+							yellow.Printf("⚠️  Secret is %d bytes, truncating to 32 bytes for SLIP-0039\n", len(secret))
+							secret = secret[:32]
+						}
+
+						masterSecret = secret
+						break
+					}
 				}
-				masterSecret = secret
 			}
 
 			// Get passphrase if not provided
 			if passphrase == "" && !cmd.Flags().Changed("passphrase") {
-				pass, err := readPassphrase("Enter passphrase (optional, press Enter to skip): ")
+				fmt.Println()
+				cyan := color.New(color.FgCyan, color.Bold)
+				cyan.Println("🔐 PASSPHRASE PROTECTION (Optional)")
+				fmt.Println()
+				fmt.Println("A passphrase adds an extra layer of security to your shares:")
+				fmt.Println("• Even with enough shares, the passphrase is required to recover your secret")
+				fmt.Println("• Uses PBKDF2 encryption (20,000+ iterations) for strong protection")
+				fmt.Println("• Store your passphrase separately from your shares")
+				fmt.Println("• Without the passphrase, your shares cannot be recovered")
+				fmt.Println()
+				yellow := color.New(color.FgYellow)
+				yellow.Println("⚠️  WARNING: If you forget your passphrase, your secret is permanently lost!")
+				fmt.Println()
+
+				pass, err := readPassphraseWithStars("Enter passphrase (press Enter to skip): ")
 				if err != nil {
 					return err
 				}
+
+				if pass != "" {
+					green := color.New(color.FgGreen)
+					green.Println("\n✓ Passphrase protection enabled")
+				} else {
+					fmt.Println("\n⚠️  No passphrase - shares alone can recover your secret")
+				}
+				fmt.Println()
+
 				passphrase = pass
 			}
 
@@ -122,7 +231,7 @@ Examples:
 			if !noFiles || outputFile == "" {
 				displaySlip039Shares(mnemonics, actualGroupThreshold, groups)
 			}
-			
+
 			// Save to file if explicitly requested
 			if outputFile != "" && !noFiles {
 				fmt.Println()
@@ -132,7 +241,7 @@ Examples:
 				fmt.Println("• Never store on cloud-synced drives")
 				fmt.Println("• Use secure deletion (shred -vfz -n 3)")
 				fmt.Println()
-				
+
 				return saveSlip039ToFile(mnemonics, actualGroupThreshold, groups, outputFile)
 			} else if outputFile != "" && noFiles {
 				return fmt.Errorf("cannot use --output with --no-files")
@@ -189,6 +298,6 @@ func saveSlip039ToFile(mnemonics [][]string, groupThreshold byte, groups []slip0
 
 	green := color.New(color.FgGreen, color.Bold)
 	green.Printf("✓ Shares saved to %s\n", filename)
-	
+
 	return nil
 }
