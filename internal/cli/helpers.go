@@ -96,8 +96,8 @@ func readPasswordWithStars(prompt string) (string, error) {
 			}
 
 		case 3: // Ctrl+C
-			fmt.Println()
-			return "", fmt.Errorf("interrupted")
+			fmt.Println("\n\nOperation cancelled by user.")
+			os.Exit(0)
 
 		case 4: // Ctrl+D (EOF)
 			if len(password) == 0 {
@@ -177,8 +177,8 @@ func readPassphraseWithStars(prompt string) (string, error) {
 			}
 
 		case 3: // Ctrl+C
-			fmt.Println()
-			return "", fmt.Errorf("interrupted")
+			fmt.Println("\n\nOperation cancelled by user.")
+			os.Exit(0)
 
 		case 4: // Ctrl+D (EOF)
 			if len(password) == 0 {
@@ -191,6 +191,117 @@ func readPassphraseWithStars(prompt string) (string, error) {
 			if char >= 32 && char <= 126 {
 				password = append(password, char)
 				fmt.Print("*")
+			}
+		}
+	}
+}
+
+// readMnemonicWithSmartStars reads a mnemonic with current word visible, completed words as stars
+func readMnemonicWithSmartStars(prompt string) (string, error) {
+	fmt.Print(prompt)
+	
+	if !term.IsTerminal(int(syscall.Stdin)) {
+		// Fallback for non-terminal
+		reader := bufio.NewReader(os.Stdin)
+		pass, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(pass), nil
+	}
+	
+	// Save current terminal state
+	oldState, err := term.MakeRaw(int(syscall.Stdin))
+	if err != nil {
+		// Fallback to hidden input if raw mode fails
+		passBytes, err := term.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			return "", err
+		}
+		fmt.Print(strings.Repeat("*", min(len(passBytes), 24)))
+		fmt.Println()
+		return string(passBytes), nil
+	}
+	defer term.Restore(int(syscall.Stdin), oldState)
+	
+	var completedWords []string
+	var currentWord []byte
+	var b [1]byte
+	
+	// Function to redraw the display
+	redrawDisplay := func() {
+		// Clear current line
+		fmt.Print("\r")
+		fmt.Print(strings.Repeat(" ", 80)) // Clear up to 80 chars
+		fmt.Print("\r")
+		fmt.Print(prompt)
+		
+		// Show completed words as stars
+		for range completedWords {
+			fmt.Print("* ")
+		}
+		
+		// Show current word in clear text
+		fmt.Print(string(currentWord))
+	}
+	
+	// Function to build final password
+	buildPassword := func() string {
+		var result []string
+		result = append(result, completedWords...)
+		if len(currentWord) > 0 {
+			result = append(result, string(currentWord))
+		}
+		return strings.Join(result, " ")
+	}
+	
+	for {
+		_, err := os.Stdin.Read(b[:])
+		if err != nil {
+			return "", err
+		}
+		
+		char := b[0]
+		
+		switch char {
+		case '\n', '\r': // Enter
+			fmt.Println()
+			return buildPassword(), nil
+			
+		case 127, 8: // Backspace/Delete
+			if len(currentWord) > 0 {
+				// Remove from current word
+				currentWord = currentWord[:len(currentWord)-1]
+			} else if len(completedWords) > 0 {
+				// Go back to previous word
+				lastWord := completedWords[len(completedWords)-1]
+				completedWords = completedWords[:len(completedWords)-1]
+				currentWord = []byte(lastWord)
+			}
+			redrawDisplay()
+			
+		case 3: // Ctrl+C
+			fmt.Println("\n\nOperation cancelled by user.")
+			os.Exit(0)
+			
+		case 4: // Ctrl+D (EOF)
+			if len(completedWords) == 0 && len(currentWord) == 0 {
+				fmt.Println()
+				return "", fmt.Errorf("EOF")
+			}
+			
+		case ' ': // Space - complete current word
+			if len(currentWord) > 0 {
+				completedWords = append(completedWords, string(currentWord))
+				currentWord = nil
+				redrawDisplay()
+			}
+			
+		default:
+			// Only accept printable ASCII characters (except space, handled above)
+			if char >= 32 && char <= 126 && char != ' ' {
+				currentWord = append(currentWord, char)
+				redrawDisplay()
 			}
 		}
 	}

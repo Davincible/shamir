@@ -138,9 +138,9 @@ Examples:
 						fmt.Println()
 						break
 					} else if choice == "2" {
-						// BIP-39 mnemonic input (with stars)
+						// BIP-39 mnemonic input (with smart stars)
 						for {
-							mnemonicInput, err := readPasswordWithStars("Enter BIP-39 mnemonic: ")
+							mnemonicInput, err := readMnemonicWithSmartStars("Enter BIP-39 mnemonic: ")
 							if err != nil {
 								return err
 							}
